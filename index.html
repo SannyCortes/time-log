@@ -5,10 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="Time Log">
+<meta name="apple-mobile-web-app-title" content="Time Tracker">
 <meta name="theme-color" content="#0d6b62">
 <style>html{color-scheme:light}body{margin:0}</style>
-<title>Testing Time Log</title>
+<title>Time Tracker Mobile</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Public+Sans:wght@400;500;600;700&display=swap">
 <style>
 /* Layout: single-column phone app. Home lists patient profiles; a profile shows two big start/stop buttons, running totals and the stamp log. */
@@ -293,7 +293,7 @@ textarea.out { font-family: var(--font-mono); font-size: 13px; min-height: 160px
   function renderHome() {
     var list = listHtml();
     app.innerHTML =
-      '<div class="top"><h1 class="brand">Testing Time Log</h1><span class="clock" id="clk"></span></div>' + warnHtml() +
+      '<div class="top"><h1 class="brand">Time Tracker Mobile</h1><span class="clock" id="clk"></span></div>' + warnHtml() +
       '<form class="card" id="newForm" autocomplete="off"><p class="label">New profile</p><div class="row">' +
       '<div class="field" style="flex:0 1 120px"><label class="hint" for="ini">Initials</label><input id="ini" class="initials" maxlength="4" inputmode="text" autocapitalize="characters" placeholder="AB" required></div>' +
       '<div class="field"><label class="hint" for="pdate">Testing date</label><input id="pdate" type="date" value="' + todayStr() + '" required></div></div>' +

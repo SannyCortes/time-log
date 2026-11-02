@@ -71,6 +71,8 @@ input.initials { font-family: var(--font-mono); font-size: 22px; font-weight: 60
 input[type="date"], input[type="search"] { -webkit-appearance: none; appearance: none; display: block; min-width: 0; max-width: 100%; text-align: left; line-height: 1.2; }
 input[type="date"]::-webkit-date-and-time-value { text-align: left; min-height: 1.2em; }
 .search { display: flex; flex-direction: column; gap: 4px; }
+.notes { display: flex; flex-direction: column; gap: 6px; }
+.notes textarea { min-height: 92px; resize: vertical; line-height: 1.4; }
 .btn { min-height: 48px; padding: 0 18px; border-radius: 8px; font-weight: 600; background: var(--surface-2); }
 .btn.primary { background: var(--accent); color: var(--accent-fg); }
 .btn.danger { color: var(--danger); }
@@ -280,7 +282,7 @@ textarea.out { font-family: var(--font-mono); font-size: 13px; min-height: 160px
         var lastE = sorted(p).slice(-1)[0];
         var through = lastE && dayKey(lastE.ts) !== p.date ? ' · through ' + fmtShort(lastE.ts) : '';
         return '<button class="prow" data-act="open" data-id="' + p.id + '"><span class="ini">' + esc(p.initials) + '</span>' +
-          '<span class="meta"><span>' + (bits.join(' · ') || 'No times yet') + '</span><span>' + p.entries.length + ' stamp' + (p.entries.length === 1 ? '' : 's') + through +
+          '<span class="meta"><span>' + (bits.join(' · ') || 'No times yet') + '</span><span>' + p.entries.length + ' stamp' + (p.entries.length === 1 ? '' : 's') + through + (p.notes && p.notes.trim() ? ' · has note' : '') +
           (running ? ' · <span class="live">timer running</span>' : '') + '</span></span>' +
           (p.example ? '<span class="badge">Example</span>' : '<span aria-hidden="true">›</span>') + '</button>';
       }).join('');
@@ -337,6 +339,7 @@ textarea.out { font-family: var(--font-mono); font-size: 13px; min-height: 160px
       '<div class="ptitle"><span class="ini">' + esc(p.initials) + '</span><span class="dt">' + esc(fmtDate(p.date)) + (p.example ? ' · <span class="badge">Example</span>' : '') + '</span><button class="btn small" data-act="editprofile" style="margin-left:auto">Edit</button></div>' +
       '<div class="toggles" id="toggles">' + toggleHtml(p) + '</div>' +
       '<div class="sums" id="sums">' + sumsHtml(p) + '</div>' +
+      '<div class="notes"><label class="label" for="pnotes">Notes</label><textarea id="pnotes" rows="3" maxlength="1000" placeholder="Overall notes, e.g. why testing was split, what is left to score">' + esc(p.notes || '') + '</textarea><span class="hint">Saved automatically. Initials only, no names.</span></div>' +
       '<div class="row"><button class="btn" style="flex:1" data-act="manual">Add time manually</button><button class="btn" style="flex:1" data-act="copy">Copy log</button></div>' +
       '<p class="label">Log (' + es.length + ')</p>' +
       '<div class="log">' + (es.length ? logHtml(p) : '<div class="empty">No stamps yet. Tap Start testing when the patient begins.</div>') + '</div>' +
@@ -374,6 +377,7 @@ textarea.out { font-family: var(--font-mono); font-size: 13px; min-height: 160px
     var t = totals(p);
     lines.push('Testing total: ' + fmtDur(t.test.ms + (t.test.live || 0)));
     lines.push('Scoring total: ' + fmtDur(t.score.ms + (t.score.live || 0)));
+    if (p.notes && p.notes.trim()) lines.push('Notes: ' + p.notes.trim());
     return lines.join('\n');
   }
   function copyOrShow(text, title) {
@@ -485,6 +489,7 @@ textarea.out { font-family: var(--font-mono); font-size: 13px; min-height: 160px
   document.addEventListener('input', function (ev) {
     var el = ev.target;
     if (el.id === 'q') { query = el.value; var pl = document.getElementById('plist'); if (pl) pl.innerHTML = listHtml(); }
+    else if (el.id === 'pnotes') { var np2 = active(); if (np2) { np2.notes = el.value; save(); } }
     else if (el.id === 'stime') {
       var dg = el.value.replace(/\D/g, '').slice(0, 4);
       el.value = dg.length > 2 ? dg.slice(0, 2) + ':' + dg.slice(2) : dg;

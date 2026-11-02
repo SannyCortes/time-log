@@ -68,6 +68,9 @@ input, select, textarea {
   width: 100%; min-height: 48px; padding: 8px 12px; border: 1.5px solid var(--line); border-radius: 8px; background: var(--bg);
 }
 input.initials { font-family: var(--font-mono); font-size: 22px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; }
+input[type="date"], input[type="search"] { -webkit-appearance: none; appearance: none; display: block; min-width: 0; max-width: 100%; text-align: left; line-height: 1.2; }
+input[type="date"]::-webkit-date-and-time-value { text-align: left; min-height: 1.2em; }
+.search { display: flex; flex-direction: column; gap: 4px; }
 .btn { min-height: 48px; padding: 0 18px; border-radius: 8px; font-weight: 600; background: var(--surface-2); }
 .btn.primary { background: var(--accent); color: var(--accent-fg); }
 .btn.danger { color: var(--danger); }
@@ -139,6 +142,7 @@ textarea.out { font-family: var(--font-mono); font-size: 13px; min-height: 160px
   var state = { profiles: [], activeId: null };
   var storageOk = true;
   var view = 'home';
+  var query = '';
 
   function uid() { return Math.random().toString(36).slice(2, 9) + Date.now().toString(36).slice(-4); }
   function load() {
@@ -181,7 +185,7 @@ textarea.out { font-family: var(--font-mono); font-size: 13px; min-height: 160px
   };
 
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
-  function fmtTime(ts) { var d = new Date(ts); return p2(d.getHours()) + p2(d.getMinutes()); }
+  function fmtTime(ts) { var d = new Date(ts); return p2(d.getHours()) + ':' + p2(d.getMinutes()); }
   function fmtDate(str) {
     var a = str.split('-'); var d = new Date(+a[0], +a[1] - 1, +a[2]);
     return d.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
@@ -240,9 +244,27 @@ textarea.out { font-family: var(--font-mono); font-size: 13px; min-height: 160px
 
   function warnHtml() { return storageOk ? '' : '<p class="warn">This browser is not saving data right now (private window or blocked storage). Logs will be lost when you close the page.</p>'; }
 
-  function renderHome() {
+  // Searchable text for a profile: initials plus every day it has activity, in several date spellings.
+  function hay(p) {
+    var s = [p.initials], days = {};
+    days[p.date] = 1; p.entries.forEach(function (e) { days[dayKey(e.ts)] = 1; });
+    Object.keys(days).forEach(function (k) {
+      var a = k.split('-'), y = +a[0], m = +a[1], d = +a[2], dt = new Date(y, m - 1, d);
+      var mon = dt.toLocaleDateString('en-US', { month: 'short' }), monL = dt.toLocaleDateString('en-US', { month: 'long' });
+      s.push(k, p2(m) + '/' + p2(d) + '/' + y, m + '/' + d + '/' + y, p2(m) + '/' + p2(d) + '/' + String(y).slice(2), m + '/' + d + '/' + String(y).slice(2),
+        p2(m) + '/' + p2(d), m + '/' + d, mon + ' ' + d, monL + ' ' + d, mon + ' ' + p2(d), monL + ' ' + p2(d), monL, dt.toLocaleDateString('en-US', { weekday: 'long' }));
+    });
+    return s.join(' | ').toLowerCase();
+  }
+
+  function listHtml() {
     var groups = {};
-    state.profiles.slice().sort(function (a, b) { return b.date.localeCompare(a.date) || b.createdAt - a.createdAt; })
+    var q = query.trim().toLowerCase(), pool = state.profiles;
+    if (q) {
+      var phrase = pool.filter(function (p) { return hay(p).indexOf(q) > -1; });
+      pool = phrase.length ? phrase : pool.filter(function (p) { var h = hay(p); return q.split(/\s+/).every(function (t) { return h.indexOf(t) > -1; }); });
+    }
+    pool.slice().sort(function (a, b) { return b.date.localeCompare(a.date) || b.createdAt - a.createdAt; })
       .forEach(function (p) { (groups[p.date] = groups[p.date] || []).push(p); });
     var dates = Object.keys(groups).sort().reverse();
     var list = dates.length ? dates.map(function (d) {
@@ -262,8 +284,12 @@ textarea.out { font-family: var(--font-mono); font-size: 13px; min-height: 160px
           (running ? ' · <span class="live">timer running</span>' : '') + '</span></span>' +
           (p.example ? '<span class="badge">Example</span>' : '<span aria-hidden="true">›</span>') + '</button>';
       }).join('');
-    }).join('') : '<div class="card empty">No profiles yet. Enter initials above to start one.</div>';
+    }).join('') : '<div class="card empty">' + (q ? 'No profiles match that search.' : 'No profiles yet. Enter initials above to start one.') + '</div>';
+    return list;
+  }
 
+  function renderHome() {
+    var list = listHtml();
     app.innerHTML =
       '<div class="top"><h1 class="brand">Testing Time Log</h1><span class="clock" id="clk"></span></div>' + warnHtml() +
       '<form class="card" id="newForm" autocomplete="off"><p class="label">New profile</p><div class="row">' +
@@ -271,7 +297,8 @@ textarea.out { font-family: var(--font-mono); font-size: 13px; min-height: 160px
       '<div class="field"><label class="hint" for="pdate">Testing date</label><input id="pdate" type="date" value="' + todayStr() + '" required></div></div>' +
       '<button class="btn primary" type="submit">Create profile</button>' +
       '<p class="hint">Initials only. Do not enter patient names or other identifying details.</p></form>' +
-      '<div class="profiles">' + list + '</div>' +
+      (state.profiles.length ? '<div class="search"><label class="label" for="q">Find a profile</label><input id="q" type="search" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Initials or date, e.g. AB, 11/1, Nov" value="' + esc(query) + '"></div>' : '') +
+      '<div class="profiles" id="plist">' + list + '</div>' +
       (state.profiles.length ? '<button class="btn" data-act="copyall">Copy all logs</button>' : '');
     tickClock();
   }
@@ -319,7 +346,7 @@ textarea.out { font-family: var(--font-mono); font-size: 13px; min-height: 160px
 
   function render() { if (view === 'profile') renderProfile(); else renderHome(); }
   function tickClock() {
-    var c = document.getElementById('clk'); if (c) c.textContent = (function () { var d = new Date(); return p2(d.getHours()) + p2(d.getMinutes()) + ':' + p2(d.getSeconds()); })();
+    var c = document.getElementById('clk'); if (c) c.textContent = (function () { var d = new Date(); return p2(d.getHours()) + ':' + p2(d.getMinutes()) + ':' + p2(d.getSeconds()); })();
   }
 
   /* ---------- actions ---------- */
@@ -362,7 +389,7 @@ textarea.out { font-family: var(--font-mono); font-size: 13px; min-height: 160px
   function openSheet(entry) {
     var p = active(); var isEdit = !!entry;
     var ts = entry ? entry.ts : Date.now();
-    var d = new Date(ts); var tv = p2(d.getHours()) + p2(d.getMinutes()), dv0 = dayKey(ts);
+    var d = new Date(ts); var tv = p2(d.getHours()) + ':' + p2(d.getMinutes()), dv0 = dayKey(ts);
     var type = entry ? entry.type : 'test_start';
     var opts = Object.keys(TYPES).map(function (k) { return '<option value="' + k + '"' + (k === type ? ' selected' : '') + '>' + (k === 'other' ? 'Other (custom label)' : TYPES[k].label) + '</option>'; }).join('');
     layer.innerHTML = '<div class="sheet"><form class="panel" id="sheetForm" role="dialog" aria-label="' + (isEdit ? 'Edit stamp' : 'Add time manually') + '">' +
@@ -370,7 +397,7 @@ textarea.out { font-family: var(--font-mono); font-size: 13px; min-height: 160px
       '<div class="field"><label class="hint" for="stype">Type</label><select id="stype">' + opts + '</select></div>' +
       '<div class="field" id="lblWrap" ' + (type === 'other' ? '' : 'hidden') + '><label class="hint" for="slabel">Label</label><input id="slabel" maxlength="40" placeholder="e.g. Interview, Break" value="' + esc(entry && entry.label || '') + '"></div>' +
       '<div class="row"><div class="field"><label class="hint" for="sdate">Date</label><input id="sdate" type="date" required value="' + dv0 + '"></div>' +
-      '<div class="field"><label class="hint" for="stime">Time (24-hour, e.g. 1430)</label><input id="stime" class="mono" type="text" inputmode="numeric" maxlength="5" pattern="([01]?[0-9]|2[0-3]):?[0-5][0-9]" placeholder="1430" required value="' + tv + '"></div></div>' +
+      '<div class="field"><label class="hint" for="stime">Time (24-hour, e.g. 14:30)</label><input id="stime" class="mono" type="text" inputmode="numeric" maxlength="5" pattern="([01]?[0-9]|2[0-3]):?[0-5][0-9]" placeholder="14:30" required value="' + tv + '"></div></div>' +
       '<div class="field"><label class="hint" for="snote">Note (optional)</label><input id="snote" maxlength="80" value="' + esc(entry && entry.note || '') + '"></div>' +
       '<button class="btn primary" type="submit">' + (isEdit ? 'Save changes' : 'Add to log') + '</button>' +
       (isEdit ? '<button class="btn danger" type="button" data-act="delentry" data-id="' + entry.id + '" id="delE">Delete stamp</button>' : '') +
@@ -380,7 +407,7 @@ textarea.out { font-family: var(--font-mono); font-size: 13px; min-height: 160px
     document.getElementById('sheetForm').addEventListener('submit', function (ev) {
       ev.preventDefault();
       var tval = document.getElementById('stime').value.trim().replace(':', '');
-      if (!/^([01]?[0-9]|2[0-3])[0-5][0-9]$/.test(tval)) { toast('Enter time as 4 digits, e.g. 0905 or 1430'); return; }
+      if (!/^([01]?[0-9]|2[0-3])[0-5][0-9]$/.test(tval)) { toast('Enter time as 4 digits, e.g. 09:05 or 14:30'); return; }
       tval = p2(+tval.slice(0, -2)) + ':' + tval.slice(-2);
       var parts = (document.getElementById('sdate').value || p.date).split('-'), tp = tval.split(':');
       var when = new Date(+parts[0], +parts[1] - 1, +parts[2], +tp[0], +tp[1], 0, 0).getTime();
@@ -453,6 +480,15 @@ textarea.out { font-family: var(--font-mono); font-size: 13px; min-height: 160px
     if (existing) { state.activeId = existing.id; view = 'profile'; render(); toast('Profile already exists. Opened it.'); return; }
     var np = { id: uid(), initials: ini, date: date, createdAt: Date.now(), entries: [] };
     state.profiles.push(np); save(); state.activeId = np.id; view = 'profile'; render(); window.scrollTo(0, 0);
+  });
+
+  document.addEventListener('input', function (ev) {
+    var el = ev.target;
+    if (el.id === 'q') { query = el.value; var pl = document.getElementById('plist'); if (pl) pl.innerHTML = listHtml(); }
+    else if (el.id === 'stime') {
+      var dg = el.value.replace(/\D/g, '').slice(0, 4);
+      el.value = dg.length > 2 ? dg.slice(0, 2) + ':' + dg.slice(2) : dg;
+    }
   });
 
   setInterval(function () {

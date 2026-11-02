@@ -25,6 +25,8 @@
   --test-soft: #dce9f7;
   --score: #a9600a;
   --score-soft: #f8e6cc;
+  --prep: #6a4aa8;
+  --prep-soft: #e6def5;
   --danger: #b3261e;
   --font-body: "Public Sans", system-ui, sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
@@ -33,13 +35,13 @@
   :root:not([data-theme="light"]) {
     --bg: #0e1615; --surface: #172220; --surface-2: #22312f; --fg: #e6efed; --muted: #94a8a4;
     --line: #2c3d3a; --accent: #43b8aa; --accent-fg: #06201d; --test: #7fb3ee; --test-soft: #1a2e47;
-    --score: #f0b45f; --score-soft: #3a2b12; --danger: #f2877f; color-scheme: dark;
+    --score: #f0b45f; --score-soft: #3a2b12; --prep: #b9a2ee; --prep-soft: #2a2140; --danger: #f2877f; color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
   --bg: #0e1615; --surface: #172220; --surface-2: #22312f; --fg: #e6efed; --muted: #94a8a4;
   --line: #2c3d3a; --accent: #43b8aa; --accent-fg: #06201d; --test: #7fb3ee; --test-soft: #1a2e47;
-  --score: #f0b45f; --score-soft: #3a2b12; --danger: #f2877f; color-scheme: dark;
+  --score: #f0b45f; --score-soft: #3a2b12; --prep: #b9a2ee; --prep-soft: #2a2140; --danger: #f2877f; color-scheme: dark;
 }
 * { box-sizing: border-box; }
 body {
@@ -99,20 +101,22 @@ input[type="date"]::-webkit-date-and-time-value { text-align: left; min-height: 
 .tgl .sub { font-family: var(--font-mono); font-size: 13px; font-variant-numeric: tabular-nums; }
 .tgl.test { background: var(--test-soft); color: var(--test); }
 .tgl.score { background: var(--score-soft); color: var(--score); }
+.tgl.prep { background: var(--prep-soft); color: var(--prep); grid-column: 1 / -1; min-height: 88px; }
 .tgl.on.test { background: var(--test); color: var(--bg); }
 .tgl.on.score { background: var(--score); color: var(--bg); }
+.tgl.on.prep { background: var(--prep); color: var(--bg); }
 .tgl:active { transform: scale(.98); }
 
-.sums { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.sum { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; display: flex; flex-direction: column; gap: 2px; }
-.sum b { font-family: var(--font-mono); font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; }
-.sum.t b { color: var(--test); } .sum.s b { color: var(--score); }
+.sums { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.sum { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.sum b { font-family: var(--font-mono); font-size: 19px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.sum.p b { color: var(--prep); } .sum.t b { color: var(--test); } .sum.s b { color: var(--score); }
 
 .log { display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
 .entry { display: grid; grid-template-columns: 4px 1fr auto auto; gap: 12px; align-items: center; padding: 0 6px 0 0; border-top: 1px solid var(--line); min-height: 56px; }
 .entry:first-child { border-top: 0; }
 .entry .bar { align-self: stretch; background: var(--muted); }
-.entry.test .bar { background: var(--test); } .entry.score .bar { background: var(--score); }
+.entry.prep .bar { background: var(--prep); } .entry.test .bar { background: var(--test); } .entry.score .bar { background: var(--score); }
 .entry .txt { padding: 8px 0; min-width: 0; display: flex; flex-direction: column; }
 .entry .txt b { font-weight: 600; }
 .entry .txt span { font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
@@ -166,6 +170,8 @@ textarea.out { font-family: var(--font-mono); font-size: 13px; min-height: 160px
     state.profiles = [{
       id: uid(), initials: 'EX', date: todayStr(), example: true, createdAt: t,
       entries: [
+        { id: uid(), type: 'prep_start', ts: t - 25 * m },
+        { id: uid(), type: 'prep_end', ts: t - 5 * m },
         { id: uid(), type: 'test_start', ts: t },
         { id: uid(), type: 'test_end', ts: t + 47 * m, note: 'Break after memory subtests' },
         { id: uid(), type: 'test_start', ts: t + 58 * m },
@@ -178,7 +184,10 @@ textarea.out { font-family: var(--font-mono); font-size: 13px; min-height: 160px
     }];
   }
 
+  var CATNAME = { prep: 'Testing prep', test: 'Testing', score: 'Scoring' };
   var TYPES = {
+    prep_start: { label: 'Testing prep start', cat: 'prep', dir: 's' },
+    prep_end: { label: 'Testing prep end', cat: 'prep', dir: 'e' },
     test_start: { label: 'Testing start', cat: 'test', dir: 's' },
     test_end: { label: 'Testing end', cat: 'test', dir: 'e' },
     score_start: { label: 'Scoring start', cat: 'score', dir: 's' },
@@ -201,14 +210,14 @@ textarea.out { font-family: var(--font-mono); font-size: 13px; min-height: 160px
 
   // Sum start/end pairs per category. An unmatched start counts as running until now.
   function totals(p) {
-    var out = { test: { ms: 0, open: null }, score: { ms: 0, open: null } };
+    var out = { prep: { ms: 0, open: null }, test: { ms: 0, open: null }, score: { ms: 0, open: null } };
     sorted(p).forEach(function (e) {
       var t = TYPES[e.type]; if (!out[t.cat]) return;
       var o = out[t.cat];
       if (t.dir === 's') { if (o.open == null) o.open = e.ts; }
       else if (t.dir === 'e' && o.open != null) { o.ms += Math.max(0, e.ts - o.open); o.open = null; }
     });
-    ['test', 'score'].forEach(function (k) { if (out[k].open != null) out[k].live = Math.max(0, Date.now() - out[k].open); });
+    ['prep', 'test', 'score'].forEach(function (k) { if (out[k].open != null) out[k].live = Math.max(0, Date.now() - out[k].open); });
     return out;
   }
   function active() { return state.profiles.find(function (p) { return p.id === state.activeId; }); }
@@ -216,15 +225,15 @@ textarea.out { font-family: var(--font-mono); font-size: 13px; min-height: 160px
   function fmtShort(ts) { return new Date(ts).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' }); }
   // Group entries by calendar day. A start/end pair counts toward the day it started on.
   function perDay(p) {
-    var days = {}, open = { test: null, score: null };
-    function D(k) { return days[k] || (days[k] = { test: 0, score: 0, entries: [] }); }
+    var days = {}, open = { prep: null, test: null, score: null };
+    function D(k) { return days[k] || (days[k] = { prep: 0, test: 0, score: 0, entries: [] }); }
     sorted(p).forEach(function (e) {
       var t = TYPES[e.type], k = dayKey(e.ts); D(k).entries.push(e);
       if (t.cat === 'other') return;
       if (t.dir === 's') { if (!open[t.cat]) open[t.cat] = { ts: e.ts, day: k }; }
       else if (open[t.cat]) { D(open[t.cat].day)[t.cat] += Math.max(0, e.ts - open[t.cat].ts); open[t.cat] = null; }
     });
-    ['test', 'score'].forEach(function (c) { if (open[c]) D(open[c].day)[c] += Math.max(0, Date.now() - open[c].ts); });
+    ['prep', 'test', 'score'].forEach(function (c) { if (open[c]) D(open[c].day)[c] += Math.max(0, Date.now() - open[c].ts); });
     return days;
   }
   function dayCount(p, c) {
@@ -235,6 +244,7 @@ textarea.out { font-family: var(--font-mono); font-size: 13px; min-height: 160px
     var days = perDay(p);
     return Object.keys(days).sort().map(function (k) {
       var d = days[k], b = [];
+      if (d.prep) b.push('Prep ' + fmtDur(d.prep));
       if (d.test) b.push('Testing ' + fmtDur(d.test));
       if (d.score) b.push('Scoring ' + fmtDur(d.score));
       return '<div class="dayhead"><span>' + esc(fmtDate(k)) + (k === p.date ? ' · first day' : '') + '</span><span class="mono">' + b.join(' · ') + '</span></div>' + d.entries.map(entryHtml).join('');
@@ -273,12 +283,13 @@ textarea.out { font-family: var(--font-mono); font-size: 13px; min-height: 160px
       return '<div class="day"><p class="label">' + esc(fmtDate(d)) + '</p></div>' + groups[d].map(function (p) {
         var t = totals(p);
         var bits = [];
-        if (t.test.ms || t.test.live != null) bits.push('Testing ' + fmtDur(t.test.ms + (t.test.live || 0)));
-        if (t.score.ms || t.score.live != null) bits.push('Scoring ' + fmtDur(t.score.ms + (t.score.live || 0)));
-        var running = t.test.open != null || t.score.open != null;
-        var nt = dayCount(p, 'test'), ns = dayCount(p, 'score');
-        if (nt > 1) bits[0] += ' (' + nt + ' days)';
-        if (ns > 1) bits[bits.length - 1] += ' (' + ns + ' days)';
+        ['prep', 'test', 'score'].forEach(function (c) {
+          if (t[c].ms || t[c].live != null) {
+            var n = dayCount(p, c);
+            bits.push((c === 'prep' ? 'Prep ' : c === 'test' ? 'Testing ' : 'Scoring ') + fmtDur(t[c].ms + (t[c].live || 0)) + (n > 1 ? ' (' + n + ' days)' : ''));
+          }
+        });
+        var running = t.prep.open != null || t.test.open != null || t.score.open != null;
         var lastE = sorted(p).slice(-1)[0];
         var through = lastE && dayKey(lastE.ts) !== p.date ? ' · through ' + fmtShort(lastE.ts) : '';
         return '<button class="prow" data-act="open" data-id="' + p.id + '"><span class="ini">' + esc(p.initials) + '</span>' +
@@ -316,8 +327,9 @@ textarea.out { font-family: var(--font-mono); font-size: 13px; min-height: 160px
     var t = totals(p);
     function v(o) { return fmtDur(o.ms + (o.live || 0)) + (o.live != null ? ' …' : ''); }
     function dn(c) { var n = dayCount(p, c); return n > 1 ? '<span class="hint">across ' + n + ' days</span>' : ''; }
-    return '<div class="sum t"><span class="label">Testing total</span><b>' + v(t.test) + '</b>' + dn('test') + '</div>' +
-           '<div class="sum s"><span class="label">Scoring total</span><b>' + v(t.score) + '</b>' + dn('score') + '</div>';
+    return '<div class="sum p"><span class="label">Prep</span><b>' + v(t.prep) + '</b>' + dn('prep') + '</div>' +
+           '<div class="sum t"><span class="label">Testing</span><b>' + v(t.test) + '</b>' + dn('test') + '</div>' +
+           '<div class="sum s"><span class="label">Scoring</span><b>' + v(t.score) + '</b>' + dn('score') + '</div>';
   }
 
   function toggleHtml(p) {
@@ -328,7 +340,7 @@ textarea.out { font-family: var(--font-mono); font-size: 13px; min-height: 160px
         '<span class="act">' + (on ? 'End ' + name.toLowerCase() : 'Start ' + name.toLowerCase()) + '</span>' +
         '<span class="sub">' + (on ? 'Started ' + (dayKey(t[cat].open) === todayStr() ? '' : fmtShort(t[cat].open) + ' ') + fmtTime(t[cat].open) : 'Tap to stamp now') + '</span></button>';
     }
-    return btn('test', 'Testing') + btn('score', 'Scoring');
+    return btn('prep', 'Testing prep') + btn('test', 'Testing') + btn('score', 'Scoring');
   }
 
   function renderProfile() {
@@ -368,6 +380,7 @@ textarea.out { font-family: var(--font-mono); font-size: 13px; min-height: 160px
     var days = perDay(p);
     Object.keys(days).sort().forEach(function (k) {
       var d = days[k], b = [];
+      if (d.prep) b.push('Prep ' + fmtDur(d.prep));
       if (d.test) b.push('Testing ' + fmtDur(d.test));
       if (d.score) b.push('Scoring ' + fmtDur(d.score));
       lines.push('', fmtDate(k) + (b.length ? ' — ' + b.join(', ') : ''));
@@ -375,6 +388,7 @@ textarea.out { font-family: var(--font-mono); font-size: 13px; min-height: 160px
     });
     lines.push('');
     var t = totals(p);
+    lines.push('Testing prep total: ' + fmtDur(t.prep.ms + (t.prep.live || 0)));
     lines.push('Testing total: ' + fmtDur(t.test.ms + (t.test.live || 0)));
     lines.push('Scoring total: ' + fmtDur(t.score.ms + (t.score.live || 0)));
     if (p.notes && p.notes.trim()) lines.push('Notes: ' + p.notes.trim());
@@ -458,7 +472,7 @@ textarea.out { font-family: var(--font-mono); font-size: 13px; min-height: 160px
     else if (act === 'toggle') {
       var cat = el.getAttribute('data-cat'), t = totals(p), on = t[cat].open != null;
       addEntry(p, cat + (on ? '_end' : '_start'), Date.now());
-      render(); toast((cat === 'test' ? 'Testing ' : 'Scoring ') + (on ? 'ended ' : 'started ') + fmtTime(Date.now()));
+      render(); toast(CATNAME[cat] + ' ' + (on ? 'ended ' : 'started ') + fmtTime(Date.now()));
     }
     else if (act === 'manual') openSheet(null);
     else if (act === 'editprofile') openProfileSheet(p);

@@ -7,6 +7,9 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Time Tracker">
 <meta name="theme-color" content="#0d6b62">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" href="icon-192.png">
 <style>html{color-scheme:light}body{margin:0}</style>
 <title>Time Tracker Mobile</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Public+Sans:wght@400;500;600;700&display=swap">
@@ -27,6 +30,10 @@
   --score-soft: #f8e6cc;
   --prep: #6a4aa8;
   --prep-soft: #e6def5;
+  --st-new: #66766f; --st-new-soft: #e4eae8;
+  --st-prog: #1f5fa8; --st-prog-soft: #dce9f7;
+  --st-ready: #9a6200; --st-ready-soft: #fbecc8;
+  --st-final: #1f7a3d; --st-final-soft: #d9f0df;
   --danger: #b3261e;
   --font-body: "Public Sans", system-ui, sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
@@ -35,13 +42,13 @@
   :root:not([data-theme="light"]) {
     --bg: #0e1615; --surface: #172220; --surface-2: #22312f; --fg: #e6efed; --muted: #94a8a4;
     --line: #2c3d3a; --accent: #43b8aa; --accent-fg: #06201d; --test: #7fb3ee; --test-soft: #1a2e47;
-    --score: #f0b45f; --score-soft: #3a2b12; --prep: #b9a2ee; --prep-soft: #2a2140; --danger: #f2877f; color-scheme: dark;
+    --score: #f0b45f; --score-soft: #3a2b12; --prep: #b9a2ee; --prep-soft: #2a2140; --st-new: #94a8a4; --st-new-soft: #22312f; --st-prog: #7fb3ee; --st-prog-soft: #1a2e47; --st-ready: #f0c060; --st-ready-soft: #3a2e10; --st-final: #6fd08a; --st-final-soft: #143222; --danger: #f2877f; color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
   --bg: #0e1615; --surface: #172220; --surface-2: #22312f; --fg: #e6efed; --muted: #94a8a4;
   --line: #2c3d3a; --accent: #43b8aa; --accent-fg: #06201d; --test: #7fb3ee; --test-soft: #1a2e47;
-  --score: #f0b45f; --score-soft: #3a2b12; --prep: #b9a2ee; --prep-soft: #2a2140; --danger: #f2877f; color-scheme: dark;
+  --score: #f0b45f; --score-soft: #3a2b12; --prep: #b9a2ee; --prep-soft: #2a2140; --st-new: #94a8a4; --st-new-soft: #22312f; --st-prog: #7fb3ee; --st-prog-soft: #1a2e47; --st-ready: #f0c060; --st-ready-soft: #3a2e10; --st-final: #6fd08a; --st-final-soft: #143222; --danger: #f2877f; color-scheme: dark;
 }
 * { box-sizing: border-box; }
 body {
@@ -75,6 +82,54 @@ input[type="date"]::-webkit-date-and-time-value { text-align: left; min-height: 
 .search { display: flex; flex-direction: column; gap: 4px; }
 .notes { display: flex; flex-direction: column; gap: 6px; }
 .notes textarea { min-height: 92px; resize: vertical; line-height: 1.4; }
+.prow[data-st="new"] { box-shadow: inset 7px 0 0 var(--st-new); padding-left: 21px; background: var(--st-new-soft); }
+.prow[data-st="prog"] { box-shadow: inset 7px 0 0 var(--st-prog); padding-left: 21px; background: var(--st-prog-soft); }
+.prow[data-st="ready"] { box-shadow: inset 7px 0 0 var(--st-ready); padding-left: 21px; background: var(--st-ready-soft); }
+.prow[data-st="final"] { box-shadow: inset 7px 0 0 var(--st-final); padding-left: 21px; background: var(--st-final-soft); }
+.prow .right { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+.pill { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; padding: 4px 9px; border-radius: 999px; white-space: nowrap; background: var(--st-new); color: var(--bg); }
+.pill[data-st="prog"] { background: var(--st-prog); }
+.pill[data-st="ready"] { background: var(--st-ready); }
+.pill[data-st="final"] { background: var(--st-final); }
+.chips { display: flex; gap: 8px; flex-wrap: wrap; }
+.chip { min-height: 40px; padding: 0 12px; border-radius: 999px; border: 1.5px solid var(--line); background: var(--surface); font-size: 14px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; }
+.chip[aria-pressed="true"] { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+.chip .n { font-family: var(--font-mono); font-size: 12px; opacity: .75; }
+.wraphead { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.chk { display: flex; gap: 14px; align-items: flex-start; min-height: 52px; padding: 6px 0; cursor: pointer; }
+.chk input { width: 28px; height: 28px; min-height: 0; padding: 0; flex: none; margin: 2px 0 0; accent-color: var(--accent); }
+.chk .t { display: flex; flex-direction: column; min-width: 0; }
+.chk .t b { font-weight: 600; }
+.btn:disabled { opacity: .4; cursor: default; }
+#undoslot:empty { display: none; }
+.undo { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
+.undo .row { gap: 8px; }
+.undo .btn.small { flex: 1 1 auto; min-height: 44px; }
+.banner { display: block; border-radius: 8px; padding: 12px 14px; font-size: 14px; font-weight: 600; text-align: left; width: 100%; min-height: 48px; }
+.banner.attn { background: var(--st-ready-soft); color: var(--st-ready); }
+.banner.ok { background: var(--st-final-soft); color: var(--st-final); }
+.prow .meta .late { color: var(--st-ready); font-weight: 700; }
+details.tools { padding: 0; gap: 0; }
+details.tools summary { padding: 14px 16px; font-weight: 600; cursor: pointer; min-height: 48px; display: flex; align-items: center; }
+details.tools .inner { padding: 0 16px 16px; display: flex; flex-direction: column; gap: 12px; }
+details.tools .field { flex: none; }
+.tools h3 { font-size: 12px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.toast.cheer { background: var(--st-final); color: var(--bg); }
+@keyframes pop { from { transform: translateX(-50%) scale(.92); } to { transform: translateX(-50%) scale(1); } }
+@media (prefers-reduced-motion: no-preference) { .toast.cheer { animation: pop .25s ease-out; } }
+.wknav { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.wknav .btn { min-width: 52px; padding: 0 14px; }
+.bars { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; align-items: end; height: 126px; }
+.bars .col { display: flex; flex-direction: column; justify-content: flex-end; height: 100%; }
+.bars .seg.p { background: var(--prep); } .bars .seg.t { background: var(--test); } .bars .seg.s { background: var(--score); }
+.bars .col .seg:first-child { border-radius: 4px 4px 0 0; }
+.barlbl { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; text-align: center; font-size: 12px; color: var(--muted); }
+.barlbl .mono { font-size: 11px; display: block; color: var(--fg); min-height: 1.2em; }
+.legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 13px; color: var(--muted); }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; }
+.stat { display: flex; justify-content: space-between; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line); }
+.stat:first-child { border-top: 0; }
+.stat b { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-weight: 600; text-align: right; }
 .btn { min-height: 48px; padding: 0 18px; border-radius: 8px; font-weight: 600; background: var(--surface-2); }
 .btn.primary { background: var(--accent); color: var(--accent-fg); }
 .btn.danger { color: var(--danger); }
@@ -145,21 +200,57 @@ textarea.out { font-family: var(--font-mono); font-size: 13px; min-height: 160px
 <script>
 (function () {
   var KEY = 'testingTimeLog.v1';
-  var state = { profiles: [], activeId: null };
+  var state = { profiles: [], activeId: null, settings: { purgeDays: 0, lastBackup: null } };
   var storageOk = true;
   var view = 'home';
   var query = '';
+  var statusFilter = 'all';
+  var lastStamp = null, lastUndo = '', weekOffset = 0, toolsOpen = false, pendingToast = '';
+  var STATUS = { new: { label: 'Not started' }, prog: { label: 'In progress' }, ready: { label: 'Ready to transfer' }, final: { label: 'Finalized' } };
+  var STORDER = ['new', 'prog', 'ready', 'final'];
+  function status(p) { if (p.final) return 'final'; if (p.done) return 'ready'; return p.entries.length ? 'prog' : 'new'; }
+  function chipsHtml() {
+    if (!state.profiles.length) return '';
+    var c = { all: state.profiles.length };
+    STORDER.forEach(function (k) { c[k] = 0; });
+    state.profiles.forEach(function (p) { c[status(p)]++; });
+    var items = [['all', 'All']].concat(STORDER.map(function (k) { return [k, STATUS[k].label]; }));
+    return '<div class="chips" role="group" aria-label="Filter by status">' + items.map(function (x) {
+      return '<button class="chip" data-act="filter" data-st="' + x[0] + '" aria-pressed="' + (statusFilter === x[0]) + '">' + x[1] + ' <span class="n">' + c[x[0]] + '</span></button>';
+    }).join('') + '</div>';
+  }
+  function checkedLine(ts, fallback) { return ts ? 'Checked ' + fmtShort(ts) + ' at ' + fmtTime(ts) : fallback; }
+  function wrapHtml(p) {
+    var st = status(p);
+    return '<div class="wraphead"><p class="label">Wrap-up</p><span class="pill" data-st="' + st + '">' + STATUS[st].label + '</span></div>' +
+      '<label class="chk"><input type="checkbox" id="chkDone"' + (p.done ? ' checked' : '') + '><span class="t"><b>Testing and scoring complete</b><span class="hint">' + checkedLine(p.done && p.doneAt, 'Check when all times are logged here') + '</span></span></label>' +
+      '<label class="chk"><input type="checkbox" id="chkFinal"' + (p.final ? ' checked' : '') + '><span class="t"><b>Entered on master tracker</b><span class="hint">' + checkedLine(p.final && p.finalAt, 'Check after updating the clinic drive tracker') + '</span></span></label>';
+  }
 
+  // Removes finalized profiles older than the chosen number of days. Returns how many were removed.
+  function purgeOld() {
+    var days = +state.settings.purgeDays || 0; if (!days) return 0;
+    var cut = Date.now() - days * 86400000, before = state.profiles.length;
+    state.profiles = state.profiles.filter(function (p) { return !(p.final && p.finalAt && p.finalAt < cut); });
+    var n = before - state.profiles.length;
+    if (n) { save(); pendingToast = 'Removed ' + n + ' finalized profile' + (n === 1 ? '' : 's') + ' older than ' + days + ' days'; }
+    return n;
+  }
   function uid() { return Math.random().toString(36).slice(2, 9) + Date.now().toString(36).slice(-4); }
   function load() {
     try {
       var raw = localStorage.getItem(KEY);
-      if (raw) { var d = JSON.parse(raw); if (d && Array.isArray(d.profiles)) state.profiles = d.profiles; }
+      if (raw) {
+        var d = JSON.parse(raw);
+        if (d && Array.isArray(d.profiles)) state.profiles = d.profiles;
+        if (d && d.settings && typeof d.settings === 'object') { state.settings.purgeDays = +d.settings.purgeDays || 0; state.settings.lastBackup = +d.settings.lastBackup || null; }
+        purgeOld();
+      }
       else { seed(); }
     } catch (e) { storageOk = false; seed(); }
   }
   function save() {
-    try { localStorage.setItem(KEY, JSON.stringify({ profiles: state.profiles })); storageOk = true; }
+    try { localStorage.setItem(KEY, JSON.stringify({ profiles: state.profiles, settings: state.settings })); storageOk = true; }
     catch (e) { storageOk = false; }
   }
   function todayStr() { var d = new Date(); return d.getFullYear() + '-' + p2(d.getMonth() + 1) + '-' + p2(d.getDate()); }
@@ -251,6 +342,115 @@ textarea.out { font-family: var(--font-mono); font-size: 13px; min-height: 160px
     }).join('');
   }
 
+  /* ---------- helpers ---------- */
+  function waitDays(p) {
+    if (status(p) !== 'ready') return 0;
+    var le = sorted(p).slice(-1)[0], t = p.doneAt || (le ? le.ts : 0);
+    return t ? Math.floor((Date.now() - t) / 86400000) : 0;
+  }
+  function attnHtml() {
+    var late = state.profiles.filter(function (p) { return waitDays(p) >= 3; }).length;
+    if (late) return '<button class="banner attn" data-act="filter" data-st="ready">' + late + ' profile' + (late === 1 ? '' : 's') + ' waiting 3+ days to go on the master tracker. Tap to view.</button>';
+    var ready = 0, fin = 0;
+    state.profiles.forEach(function (p) { var st = status(p); if (st === 'ready') ready++; if (st === 'final') fin++; });
+    if (!ready && fin) return '<p class="banner ok">All caught up. Nothing is waiting for the master tracker.</p>';
+    return '';
+  }
+  function backupAgo() {
+    var t = state.settings.lastBackup; if (!t) return 'never';
+    var d = Math.floor((Date.now() - t) / 86400000);
+    return fmtShort(t) + ' at ' + fmtTime(t) + (d >= 1 ? ' (' + d + ' day' + (d === 1 ? '' : 's') + ' ago)' : ' (today)');
+  }
+  function toolsHtml() {
+    var nfin = state.profiles.filter(function (p) { return p.final; }).length;
+    var opts = [[0, 'Never'], [14, 'After 14 days'], [30, 'After 30 days'], [60, 'After 60 days']].map(function (o) {
+      return '<option value="' + o[0] + '"' + (+state.settings.purgeDays === o[0] ? ' selected' : '') + '>' + o[1] + '</option>';
+    }).join('');
+    return '<details class="card tools" id="tools"' + (toolsOpen ? ' open' : '') + '><summary>Backup and settings</summary><div class="inner">' +
+      '<h3>Backup</h3><p class="hint">Your logs are saved only in this phone\'s browser. Last backup: ' + backupAgo() + '.</p>' +
+      '<div class="row"><button class="btn" style="flex:1" data-act="backup">Copy backup</button><button class="btn" style="flex:1" data-act="restore">Restore</button></div>' +
+      '<p class="hint">A backup contains patient initials and dates. Keep it only where clinic policy allows.</p>' +
+      '<h3>Clean up</h3><div class="field"><label class="hint" for="purge">Auto-delete finalized profiles</label><select id="purge">' + opts + '</select></div>' +
+      '<p class="hint">Counted from the day you checked "Entered on master tracker". Deleted profiles cannot be recovered.</p>' +
+      '<button class="btn danger" data-act="clearfinal"' + (nfin ? '' : ' disabled') + '>Delete all finalized profiles (' + nfin + ')</button>' +
+      '</div></details>';
+  }
+  function undoHtml(p) {
+    if (!lastStamp || lastStamp.pid !== p.id || Date.now() > lastStamp.until) return '';
+    var e = p.entries.find(function (x) { return x.id === lastStamp.eid; }); if (!e) return '';
+    return '<div class="undo"><span><b>' + esc(label(e)) + ' ' + fmtTime(e.ts) + '</b><br><span class="hint">Forgot to tap? Move it earlier.</span></span><div class="row">' +
+      [5, 10, 15].map(function (m) { return '<button class="btn small" data-act="shift" data-min="' + m + '">' + m + ' min earlier</button>'; }).join('') +
+      '<button class="btn small danger" data-act="undostamp">Undo</button></div></div>';
+  }
+  function cleanProfile(x) {
+    if (!x || typeof x.id !== 'string' || typeof x.initials !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(x.date || '') || !Array.isArray(x.entries)) return null;
+    var es = [];
+    x.entries.forEach(function (e) {
+      if (e && typeof e.id === 'string' && TYPES[e.type] && typeof e.ts === 'number' && isFinite(e.ts)) {
+        var o = { id: e.id, type: e.type, ts: e.ts };
+        if (typeof e.note === 'string') o.note = e.note.slice(0, 80);
+        if (typeof e.label === 'string') o.label = e.label.slice(0, 40);
+        es.push(o);
+      }
+    });
+    var p = { id: x.id, initials: x.initials.toUpperCase().replace(/[^A-Z]/g, '').slice(0, 4) || 'XX', date: x.date, createdAt: +x.createdAt || Date.now(), entries: es };
+    if (typeof x.notes === 'string') p.notes = x.notes.slice(0, 1000);
+    if (x.done) { p.done = true; p.doneAt = +x.doneAt || undefined; }
+    if (x.final) { p.final = true; p.done = true; p.finalAt = +x.finalAt || undefined; }
+    if (x.example) p.example = true;
+    return p;
+  }
+  function weekStart(off) {
+    var d = new Date(); d.setHours(0, 0, 0, 0);
+    d.setDate(d.getDate() - ((d.getDay() + 6) % 7) + off * 7);
+    return d;
+  }
+  function keyShort(k) { var a = k.split('-'); return new Date(+a[0], +a[1] - 1, +a[2]).toLocaleDateString([], { month: 'short', day: 'numeric' }); }
+  function renderSummary() {
+    var ws = weekStart(weekOffset), days = [];
+    for (var i = 0; i < 7; i++) { var d = new Date(ws); d.setDate(d.getDate() + i); days.push(dayKey(d.getTime())); }
+    var CATS = ['prep', 'test', 'score'], tot = { prep: 0, test: 0, score: 0 }, cnt = { prep: 0, test: 0, score: 0 }, byDay = {}, worked = 0, fin = 0, waiting = 0;
+    days.forEach(function (k) { byDay[k] = { prep: 0, test: 0, score: 0 }; });
+    state.profiles.forEach(function (p) {
+      if (p.example) return;
+      if (status(p) === 'ready') waiting++;
+      var pd = perDay(p), any = false, mine = { prep: 0, test: 0, score: 0 };
+      days.forEach(function (k) {
+        var dd = pd[k]; if (!dd) return;
+        if (dd.entries.length) any = true;
+        CATS.forEach(function (c) { mine[c] += dd[c]; byDay[k][c] += dd[c]; });
+      });
+      if (any) worked++;
+      CATS.forEach(function (c) { tot[c] += mine[c]; if (mine[c] > 0) cnt[c]++; });
+      if (p.final && p.finalAt) { var fk = dayKey(p.finalAt); if (fk >= days[0] && fk <= days[6]) fin++; }
+    });
+    var maxDay = 1; days.forEach(function (k) { maxDay = Math.max(maxDay, byDay[k].prep + byDay[k].test + byDay[k].score); });
+    var wd = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    var bars = days.map(function (k) {
+      var b = byDay[k];
+      function seg(c, cls) { return b[c] ? '<div class="seg ' + cls + '" style="height:' + Math.max(3, Math.round(b[c] / maxDay * 100)) + 'px"></div>' : ''; }
+      return '<div class="col">' + seg('score', 's') + seg('test', 't') + seg('prep', 'p') + '</div>';
+    }).join('');
+    var lbls = days.map(function (k, i) { var t = byDay[k].prep + byDay[k].test + byDay[k].score; return '<div>' + wd[i] + '<span class="mono">' + (t ? fmtDur(t) : '') + '</span></div>'; }).join('');
+    function avg(c) { return cnt[c] ? fmtDur(tot[c] / cnt[c]) : 'none yet'; }
+    var rel = weekOffset === 0 ? 'This week' : weekOffset === -1 ? 'Last week' : Math.abs(weekOffset) + ' weeks ago';
+    app.innerHTML =
+      '<div class="top"><button class="back" data-act="home">‹ Profiles</button><span class="clock" id="clk"></span></div>' +
+      '<h1 class="brand">Weekly summary</h1>' +
+      '<div class="wknav"><button class="btn" data-act="weekprev" aria-label="Previous week">‹</button><div style="text-align:center"><b>' + keyShort(days[0]) + ' to ' + keyShort(days[6]) + '</b><br><span class="hint">' + rel + '</span></div><button class="btn" data-act="weeknext" aria-label="Next week"' + (weekOffset >= 0 ? ' disabled' : '') + '>›</button></div>' +
+      '<div class="sums"><div class="sum p"><span class="label">Prep</span><b>' + fmtDur(tot.prep) + '</b></div><div class="sum t"><span class="label">Testing</span><b>' + fmtDur(tot.test) + '</b></div><div class="sum s"><span class="label">Scoring</span><b>' + fmtDur(tot.score) + '</b></div></div>' +
+      '<div class="card"><p class="label">Time by day</p><div class="bars">' + bars + '</div><div class="barlbl">' + lbls + '</div>' +
+      '<div class="legend"><span><i style="background:var(--prep)"></i>Prep</span><span><i style="background:var(--test)"></i>Testing</span><span><i style="background:var(--score)"></i>Scoring</span></div></div>' +
+      '<div class="card"><div class="stat"><span>Profiles worked on</span><b>' + worked + '</b></div>' +
+      '<div class="stat"><span>Finalized this week</span><b>' + fin + '</b></div>' +
+      '<div class="stat"><span>Waiting for master tracker now</span><b>' + waiting + '</b></div>' +
+      '<div class="stat"><span>Average prep per profile</span><b>' + avg('prep') + '</b></div>' +
+      '<div class="stat"><span>Average testing per profile</span><b>' + avg('test') + '</b></div>' +
+      '<div class="stat"><span>Average scoring per profile</span><b>' + avg('score') + '</b></div></div>' +
+      '<p class="hint">Time counts toward the day it was started. The example profile is not included.</p>';
+    tickClock();
+  }
+
   /* ---------- rendering ---------- */
   var app = document.getElementById('app'), layer = document.getElementById('layer');
 
@@ -258,7 +458,7 @@ textarea.out { font-family: var(--font-mono); font-size: 13px; min-height: 160px
 
   // Searchable text for a profile: initials plus every day it has activity, in several date spellings.
   function hay(p) {
-    var s = [p.initials], days = {};
+    var s = [p.initials, STATUS[status(p)].label, p.notes || ''], days = {};
     days[p.date] = 1; p.entries.forEach(function (e) { days[dayKey(e.ts)] = 1; });
     Object.keys(days).forEach(function (k) {
       var a = k.split('-'), y = +a[0], m = +a[1], d = +a[2], dt = new Date(y, m - 1, d);
@@ -276,6 +476,7 @@ textarea.out { font-family: var(--font-mono); font-size: 13px; min-height: 160px
       var phrase = pool.filter(function (p) { return hay(p).indexOf(q) > -1; });
       pool = phrase.length ? phrase : pool.filter(function (p) { var h = hay(p); return q.split(/\s+/).every(function (t) { return h.indexOf(t) > -1; }); });
     }
+    if (statusFilter !== 'all') pool = pool.filter(function (p) { return status(p) === statusFilter; });
     pool.slice().sort(function (a, b) { return b.date.localeCompare(a.date) || b.createdAt - a.createdAt; })
       .forEach(function (p) { (groups[p.date] = groups[p.date] || []).push(p); });
     var dates = Object.keys(groups).sort().reverse();
@@ -290,14 +491,15 @@ textarea.out { font-family: var(--font-mono); font-size: 13px; min-height: 160px
           }
         });
         var running = t.prep.open != null || t.test.open != null || t.score.open != null;
+        var wd = waitDays(p);
         var lastE = sorted(p).slice(-1)[0];
         var through = lastE && dayKey(lastE.ts) !== p.date ? ' · through ' + fmtShort(lastE.ts) : '';
-        return '<button class="prow" data-act="open" data-id="' + p.id + '"><span class="ini">' + esc(p.initials) + '</span>' +
-          '<span class="meta"><span>' + (bits.join(' · ') || 'No times yet') + '</span><span>' + p.entries.length + ' stamp' + (p.entries.length === 1 ? '' : 's') + through + (p.notes && p.notes.trim() ? ' · has note' : '') +
+        return '<button class="prow" data-act="open" data-id="' + p.id + '" data-st="' + status(p) + '"><span class="ini">' + esc(p.initials) + '</span>' +
+          '<span class="meta"><span>' + (bits.join(' · ') || 'No times yet') + '</span><span>' + p.entries.length + ' stamp' + (p.entries.length === 1 ? '' : 's') + through + (p.notes && p.notes.trim() ? ' · has note' : '') + (wd >= 1 ? ' · <span class="' + (wd >= 3 ? 'late' : '') + '">waiting ' + wd + ' day' + (wd === 1 ? '' : 's') + '</span>' : '') +
           (running ? ' · <span class="live">timer running</span>' : '') + '</span></span>' +
-          (p.example ? '<span class="badge">Example</span>' : '<span aria-hidden="true">›</span>') + '</button>';
+          '<span class="right"><span class="pill" data-st="' + status(p) + '">' + STATUS[status(p)].label + '</span>' + (p.example ? '<span class="badge">Example</span>' : '') + '</span></button>';
       }).join('');
-    }).join('') : '<div class="card empty">' + (q ? 'No profiles match that search.' : 'No profiles yet. Enter initials above to start one.') + '</div>';
+    }).join('') : '<div class="card empty">' + ((q || statusFilter !== 'all') ? 'No profiles match that search or filter.' : 'No profiles yet. Enter initials above to start one.') + '</div>';
     return list;
   }
 
@@ -310,9 +512,10 @@ textarea.out { font-family: var(--font-mono); font-size: 13px; min-height: 160px
       '<div class="field"><label class="hint" for="pdate">Testing date</label><input id="pdate" type="date" value="' + todayStr() + '" required></div></div>' +
       '<button class="btn primary" type="submit">Create profile</button>' +
       '<p class="hint">Initials only. Do not enter patient names or other identifying details.</p></form>' +
-      (state.profiles.length ? '<div class="search"><label class="label" for="q">Find a profile</label><input id="q" type="search" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Initials or date, e.g. AB, 11/1, Nov" value="' + esc(query) + '"></div>' : '') +
-      '<div class="profiles" id="plist">' + list + '</div>' +
-      (state.profiles.length ? '<button class="btn" data-act="copyall">Copy all logs</button>' : '');
+      attnHtml() + (state.profiles.length ? '<div class="search"><label class="label" for="q">Find a profile</label><input id="q" type="search" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Initials, date or note" value="' + esc(query) + '"></div>' : '') +
+      chipsHtml() + '<div class="profiles" id="plist">' + list + '</div>' +
+      (state.profiles.length ? '<div class="row"><button class="btn" style="flex:1" data-act="summary">Weekly summary</button><button class="btn" style="flex:1" data-act="copyall">Copy all logs</button></div>' : '') +
+      toolsHtml();
     tickClock();
   }
 
@@ -350,7 +553,9 @@ textarea.out { font-family: var(--font-mono); font-size: 13px; min-height: 160px
       '<div class="top"><button class="back" data-act="home">‹ Profiles</button><span class="clock" id="clk"></span></div>' + warnHtml() +
       '<div class="ptitle"><span class="ini">' + esc(p.initials) + '</span><span class="dt">' + esc(fmtDate(p.date)) + (p.example ? ' · <span class="badge">Example</span>' : '') + '</span><button class="btn small" data-act="editprofile" style="margin-left:auto">Edit</button></div>' +
       '<div class="toggles" id="toggles">' + toggleHtml(p) + '</div>' +
+      '<div id="undoslot">' + (lastUndo = undoHtml(p)) + '</div>' +
       '<div class="sums" id="sums">' + sumsHtml(p) + '</div>' +
+      '<div class="card" id="wrapup">' + wrapHtml(p) + '</div>' +
       '<div class="notes"><label class="label" for="pnotes">Notes</label><textarea id="pnotes" rows="3" maxlength="1000" placeholder="Overall notes, e.g. why testing was split, what is left to score">' + esc(p.notes || '') + '</textarea><span class="hint">Saved automatically. Initials only, no names.</span></div>' +
       '<div class="row"><button class="btn" style="flex:1" data-act="manual">Add time manually</button><button class="btn" style="flex:1" data-act="copy">Copy log</button></div>' +
       '<p class="label">Log (' + es.length + ')</p>' +
@@ -359,17 +564,17 @@ textarea.out { font-family: var(--font-mono); font-size: 13px; min-height: 160px
     tickClock();
   }
 
-  function render() { if (view === 'profile') renderProfile(); else renderHome(); }
+  function render() { if (view === 'profile') renderProfile(); else if (view === 'summary') renderSummary(); else renderHome(); }
   function tickClock() {
     var c = document.getElementById('clk'); if (c) c.textContent = (function () { var d = new Date(); return p2(d.getHours()) + ':' + p2(d.getMinutes()) + ':' + p2(d.getSeconds()); })();
   }
 
   /* ---------- actions ---------- */
   var toastT;
-  function toast(msg) {
+  function toast(msg, cheer) {
     var old = document.querySelector('.toast'); if (old) old.remove();
-    var t = document.createElement('div'); t.className = 'toast'; t.setAttribute('role', 'status'); t.textContent = msg; document.body.appendChild(t);
-    clearTimeout(toastT); toastT = setTimeout(function () { t.remove(); }, 2200);
+    var t = document.createElement('div'); t.className = 'toast' + (cheer ? ' cheer' : ''); t.setAttribute('role', 'status'); t.textContent = msg; document.body.appendChild(t);
+    clearTimeout(toastT); toastT = setTimeout(function () { t.remove(); }, cheer ? 3600 : 2200);
   }
   function addEntry(p, type, ts, note, lbl) {
     var e = { id: uid(), type: type, ts: ts }; if (note) e.note = note; if (lbl) e.label = lbl;
@@ -391,6 +596,7 @@ textarea.out { font-family: var(--font-mono); font-size: 13px; min-height: 160px
     lines.push('Testing prep total: ' + fmtDur(t.prep.ms + (t.prep.live || 0)));
     lines.push('Testing total: ' + fmtDur(t.test.ms + (t.test.live || 0)));
     lines.push('Scoring total: ' + fmtDur(t.score.ms + (t.score.live || 0)));
+    lines.push('Status: ' + STATUS[status(p)].label);
     if (p.notes && p.notes.trim()) lines.push('Notes: ' + p.notes.trim());
     return lines.join('\n');
   }
@@ -456,6 +662,14 @@ textarea.out { font-family: var(--font-mono); font-size: 13px; min-height: 160px
     document.getElementById('eini').focus();
   }
 
+  function openRestoreSheet() {
+    layer.innerHTML = '<div class="sheet"><form class="panel" id="restoreForm" role="dialog" aria-label="Restore from backup"><h2>Restore from backup</h2>' +
+      '<p class="hint">Paste the backup text. Profiles that are not already on this phone are added. Profiles you already have are not changed.</p>' +
+      '<textarea id="rtext" class="out" placeholder="Paste backup text here" required></textarea>' +
+      '<button class="btn primary" type="submit">Restore</button><button class="btn" type="button" data-act="closesheet">Cancel</button></form></div>';
+    document.getElementById('rtext').focus();
+  }
+
   var armed = null;
   function arm(btn, text, fn) {
     if (armed && armed.btn === btn) { clearTimeout(armed.t); armed = null; fn(); return; }
@@ -471,11 +685,34 @@ textarea.out { font-family: var(--font-mono); font-size: 13px; min-height: 160px
     else if (act === 'home') { view = 'home'; state.activeId = null; render(); }
     else if (act === 'toggle') {
       var cat = el.getAttribute('data-cat'), t = totals(p), on = t[cat].open != null;
-      addEntry(p, cat + (on ? '_end' : '_start'), Date.now());
+      var ne = addEntry(p, cat + (on ? '_end' : '_start'), Date.now());
+      lastStamp = { pid: p.id, eid: ne.id, until: Date.now() + 120000 };
       render(); toast(CATNAME[cat] + ' ' + (on ? 'ended ' : 'started ') + fmtTime(Date.now()));
     }
     else if (act === 'manual') openSheet(null);
     else if (act === 'editprofile') openProfileSheet(p);
+    else if (act === 'filter') { statusFilter = el.getAttribute('data-st'); render(); }
+    else if (act === 'summary') { view = 'summary'; weekOffset = 0; render(); window.scrollTo(0, 0); }
+    else if (act === 'weekprev') { weekOffset--; render(); }
+    else if (act === 'weeknext') { if (weekOffset < 0) weekOffset++; render(); }
+    else if (act === 'shift') {
+      var se = lastStamp && p && p.entries.find(function (x) { return x.id === lastStamp.eid; });
+      if (se) { se.ts -= (+el.getAttribute('data-min')) * 60000; lastStamp.until = Date.now() + 120000; save(); render(); toast('Moved to ' + fmtTime(se.ts)); }
+    }
+    else if (act === 'undostamp') {
+      if (lastStamp && p) { p.entries = p.entries.filter(function (x) { return x.id !== lastStamp.eid; }); lastStamp = null; save(); render(); toast('Stamp removed'); }
+    }
+    else if (act === 'backup') {
+      var payload = JSON.stringify({ app: 'time-tracker-mobile', version: 1, exported: new Date().toISOString(), profiles: state.profiles, settings: state.settings });
+      state.settings.lastBackup = Date.now(); save(); copyOrShow(payload, 'Backup'); render();
+    }
+    else if (act === 'restore') openRestoreSheet();
+    else if (act === 'clearfinal') {
+      var nf = state.profiles.filter(function (x) { return x.final; }).length;
+      arm(el, 'Tap again to delete ' + nf + ' finalized', function () {
+        state.profiles = state.profiles.filter(function (x) { return !x.final; }); save(); render(); toast('Finalized profiles deleted');
+      });
+    }
     else if (act === 'edit') { var e = p.entries.find(function (x) { return x.id === el.getAttribute('data-id'); }); if (e) openSheet(e); }
     else if (act === 'closesheet') layer.innerHTML = '';
     else if (act === 'delentry') arm(el, 'Tap again to delete', function () {
@@ -500,6 +737,52 @@ textarea.out { font-family: var(--font-mono); font-size: 13px; min-height: 160px
     state.profiles.push(np); save(); state.activeId = np.id; view = 'profile'; render(); window.scrollTo(0, 0);
   });
 
+  document.addEventListener('submit', function (ev) {
+    if (ev.target.id !== 'restoreForm') return;
+    ev.preventDefault();
+    var data;
+    try { data = JSON.parse(document.getElementById('rtext').value.trim()); } catch (e) { toast('That does not look like backup text'); return; }
+    var list = data && Array.isArray(data.profiles) ? data.profiles : null;
+    if (!list) { toast('No profiles found in that text'); return; }
+    var have = {}; state.profiles.forEach(function (p) { have[p.id] = 1; });
+    var added = 0;
+    list.forEach(function (x) { var c = cleanProfile(x); if (c && !have[c.id]) { state.profiles.push(c); have[c.id] = 1; added++; } });
+    save(); layer.innerHTML = ''; render();
+    toast(added ? 'Restored ' + added + ' profile' + (added === 1 ? '' : 's') : 'Nothing new to restore');
+  });
+
+  document.addEventListener('toggle', function (ev) { if (ev.target && ev.target.id === 'tools') toolsOpen = ev.target.open; }, true);
+
+  document.addEventListener('change', function (ev) {
+    var el = ev.target;
+    if (el.id === 'purge') {
+      state.settings.purgeDays = +el.value; save();
+      var n = purgeOld();
+      if (n) { render(); toast(pendingToast); pendingToast = ''; }
+      else toast(+el.value ? 'Finalized profiles will be deleted after ' + el.value + ' days' : 'Auto-delete is off');
+      return;
+    }
+    if (el.id !== 'chkDone' && el.id !== 'chkFinal') return;
+    var p = active(); if (!p) return;
+    var now = Date.now(), msg;
+    if (el.id === 'chkDone') {
+      p.done = el.checked;
+      if (el.checked) { p.doneAt = now; msg = 'Marked complete'; }
+      else { p.doneAt = undefined; p.final = false; p.finalAt = undefined; msg = 'Marked in progress'; }
+    } else {
+      p.final = el.checked;
+      if (el.checked) { p.finalAt = now; if (!p.done) { p.done = true; p.doneAt = now; } msg = 'Marked finalized'; }
+      else { p.finalAt = undefined; msg = 'Back to ready to transfer'; }
+    }
+    save();
+    var w = document.getElementById('wrapup'); if (w) w.innerHTML = wrapHtml(p);
+    if (el.id === 'chkFinal' && el.checked) {
+      var left = state.profiles.filter(function (x) { return status(x) === 'ready'; }).length;
+      if (!left) { toast('\u2713 All caught up. Nothing is waiting for the master tracker.', true); return; }
+    }
+    toast(msg);
+  });
+
   document.addEventListener('input', function (ev) {
     var el = ev.target;
     if (el.id === 'q') { query = el.value; var pl = document.getElementById('plist'); if (pl) pl.innerHTML = listHtml(); }
@@ -513,12 +796,23 @@ textarea.out { font-family: var(--font-mono); font-size: 13px; min-height: 160px
   setInterval(function () {
     tickClock();
     var p = view === 'profile' ? active() : null;
-    if (p) { var s = document.getElementById('sums'); if (s) s.innerHTML = sumsHtml(p); }
+    if (p) {
+      var s = document.getElementById('sums'); if (s) s.innerHTML = sumsHtml(p);
+      var u = document.getElementById('undoslot');
+      if (u) { var h = undoHtml(p); if (h !== lastUndo) { u.innerHTML = h; lastUndo = h; } }
+    }
   }, 1000);
 
   load(); render();
+  if (pendingToast) { toast(pendingToast); pendingToast = ''; }
 })();
 </script>
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', function () { navigator.serviceWorker.register('./sw.js').catch(function () {}); });
+}
+</script>
+
 
 </body>
 </html>

@@ -130,6 +130,19 @@ details.tools .field { flex: none; }
 .stat { display: flex; justify-content: space-between; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line); }
 .stat:first-child { border-top: 0; }
 .stat b { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-weight: 600; text-align: right; }
+.tablewrap { overflow-x: auto; }
+.gt { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.gt th { font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); text-align: left; padding: 4px 4px 6px; }
+.gt td { padding: 9px 4px; border-top: 1px solid var(--line); vertical-align: top; }
+.gt th:not(:first-child), .gt td:not(:first-child) { text-align: right; font-family: var(--font-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.gt tr.low td { color: var(--muted); }
+.hb { display: grid; grid-template-columns: 4.6em minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 6px 0; font-size: 13px; }
+.hb .track { background: var(--surface-2); height: 10px; border-radius: 5px; overflow: hidden; }
+.hb .track i { display: block; height: 100%; background: var(--test); border-radius: 5px; }
+.hb b { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-weight: 600; font-size: 12.5px; text-align: right; }
+.hb small { color: var(--muted); font-weight: 400; }
+.sumbtns { display: flex; gap: 8px; flex-wrap: wrap; }
+.sumbtns .btn { flex: 1 1 140px; }
 .btn { min-height: 48px; padding: 0 18px; border-radius: 8px; font-weight: 600; background: var(--surface-2); }
 .btn.primary { background: var(--accent); color: var(--accent-fg); }
 .btn.danger { color: var(--danger); }
@@ -200,11 +213,12 @@ textarea.out { font-family: var(--font-mono); font-size: 13px; min-height: 160px
 <script>
 (function () {
   var KEY = 'testingTimeLog.v1';
-  var state = { profiles: [], activeId: null, settings: { purgeDays: 0, lastBackup: null } };
+  var state = { profiles: [], activeId: null, archive: [], settings: { purgeDays: 0, lastBackup: null, keepArchive: true } };
   var storageOk = true;
   var view = 'home';
   var query = '';
   var statusFilter = 'all';
+  var period = 'week';
   var lastStamp = null, lastUndo = '', weekOffset = 0, toolsOpen = false, pendingToast = '';
   var STATUS = { new: { label: 'Not started' }, prog: { label: 'In progress' }, ready: { label: 'Ready to transfer' }, final: { label: 'Finalized' } };
   var STORDER = ['new', 'prog', 'ready', 'final'];
@@ -227,11 +241,38 @@ textarea.out { font-family: var(--font-mono); font-size: 13px; min-height: 160px
       '<label class="chk"><input type="checkbox" id="chkFinal"' + (p.final ? ' checked' : '') + '><span class="t"><b>Entered on master tracker</b><span class="hint">' + checkedLine(p.final && p.finalAt, 'Check after updating the clinic drive tracker') + '</span></span></label>';
   }
 
+  // When a profile is deleted, keep an anonymous record (no initials, no notes) so the summaries still count its times.
+  function archiveProfile(p) {
+    if (!state.settings.keepArchive || p.example || !p.entries || !p.entries.length) return;
+    var r = { id: 'a' + uid(), archived: true, entries: p.entries.map(function (e) { return { id: e.id, type: e.type, ts: e.ts }; }) };
+    if (p.ageGroup) r.ageGroup = p.ageGroup;
+    if (p.language) r.language = p.language;
+    if (p.referrals && p.referrals.length) r.referrals = p.referrals.slice();
+    if (p.done) { r.done = true; if (p.doneAt) r.doneAt = p.doneAt; }
+    if (p.final) { r.final = true; if (p.finalAt) r.finalAt = p.finalAt; }
+    state.archive.push(r);
+  }
+  function cleanArchive(x) {
+    if (!x || typeof x.id !== 'string' || !Array.isArray(x.entries)) return null;
+    var es = [];
+    x.entries.forEach(function (e) { if (e && TYPES[e.type] && typeof e.ts === 'number' && isFinite(e.ts)) es.push({ id: 'e' + es.length, type: e.type, ts: e.ts }); });
+    if (!es.length) return null;
+    var r = { id: x.id, archived: true, entries: es };
+    if (AGES.some(function (a) { return a[0] === x.ageGroup; })) r.ageGroup = x.ageGroup;
+    if (LANGS.some(function (a) { return a[0] === x.language; })) r.language = x.language;
+    if (Array.isArray(x.referrals)) r.referrals = x.referrals.filter(function (q) { return REFS.some(function (a) { return a[0] === q; }); });
+    if (x.done) { r.done = true; if (+x.doneAt) r.doneAt = +x.doneAt; }
+    if (x.final) { r.final = true; r.done = true; if (+x.finalAt) r.finalAt = +x.finalAt; }
+    return r;
+  }
   // Removes finalized profiles older than the chosen number of days. Returns how many were removed.
   function purgeOld() {
     var days = +state.settings.purgeDays || 0; if (!days) return 0;
     var cut = Date.now() - days * 86400000, before = state.profiles.length;
-    state.profiles = state.profiles.filter(function (p) { return !(p.final && p.finalAt && p.finalAt < cut); });
+    var keep = [], gone = [];
+    state.profiles.forEach(function (p) { (p.final && p.finalAt && p.finalAt < cut ? gone : keep).push(p); });
+    gone.forEach(archiveProfile);
+    state.profiles = keep;
     var n = before - state.profiles.length;
     if (n) { save(); pendingToast = 'Removed ' + n + ' finalized profile' + (n === 1 ? '' : 's') + ' older than ' + days + ' days'; }
     return n;
@@ -243,14 +284,15 @@ textarea.out { font-family: var(--font-mono); font-size: 13px; min-height: 160px
       if (raw) {
         var d = JSON.parse(raw);
         if (d && Array.isArray(d.profiles)) state.profiles = d.profiles;
-        if (d && d.settings && typeof d.settings === 'object') { state.settings.purgeDays = +d.settings.purgeDays || 0; state.settings.lastBackup = +d.settings.lastBackup || null; }
+        if (d && d.settings && typeof d.settings === 'object') { state.settings.purgeDays = +d.settings.purgeDays || 0; state.settings.lastBackup = +d.settings.lastBackup || null; state.settings.keepArchive = d.settings.keepArchive !== false; }
+        if (d && Array.isArray(d.archive)) state.archive = d.archive.map(cleanArchive).filter(Boolean);
         purgeOld();
       }
       else { seed(); }
     } catch (e) { storageOk = false; seed(); }
   }
   function save() {
-    try { localStorage.setItem(KEY, JSON.stringify({ profiles: state.profiles, settings: state.settings })); storageOk = true; }
+    try { localStorage.setItem(KEY, JSON.stringify({ profiles: state.profiles, archive: state.archive, settings: state.settings })); storageOk = true; }
     catch (e) { storageOk = false; }
   }
   function todayStr() { var d = new Date(); return d.getFullYear() + '-' + p2(d.getMonth() + 1) + '-' + p2(d.getDate()); }
@@ -373,6 +415,10 @@ textarea.out { font-family: var(--font-mono); font-size: 13px; min-height: 160px
       '<h3>Clean up</h3><div class="field"><label class="hint" for="purge">Auto-delete finalized profiles</label><select id="purge">' + opts + '</select></div>' +
       '<p class="hint">Counted from the day you checked "Entered on master tracker". Deleted profiles cannot be recovered.</p>' +
       '<button class="btn danger" data-act="clearfinal"' + (nfin ? '' : ' disabled') + '>Delete all finalized profiles (' + nfin + ')</button>' +
+      '<h3>Deleted profiles</h3>' +
+      '<label class="chk"><input type="checkbox" id="keepArch"' + (state.settings.keepArchive ? ' checked' : '') + '><span class="t"><b>Keep anonymous times for the summary</b><span class="hint">When a profile is deleted, its initials and notes are removed. Its times, dates and patient details stay in the summary totals.</span></span></label>' +
+      '<p class="hint">' + state.archive.length + ' anonymous record' + (state.archive.length === 1 ? '' : 's') + ' saved. Dates of service are still stored, so check clinic policy before relying on this.</p>' +
+      '<button class="btn danger" data-act="erasearchive"' + (state.archive.length ? '' : ' disabled') + '>Erase anonymous records (' + state.archive.length + ')</button>' +
       '</div></details>';
   }
   function undoHtml(p) {
@@ -398,6 +444,9 @@ textarea.out { font-family: var(--font-mono); font-size: 13px; min-height: 160px
     if (x.done) { p.done = true; p.doneAt = +x.doneAt || undefined; }
     if (x.final) { p.final = true; p.done = true; p.finalAt = +x.finalAt || undefined; }
     if (x.example) p.example = true;
+    if (AGES.some(function (a) { return a[0] === x.ageGroup; })) p.ageGroup = x.ageGroup;
+    if (LANGS.some(function (a) { return a[0] === x.language; })) p.language = x.language;
+    if (Array.isArray(x.referrals)) p.referrals = x.referrals.filter(function (r) { return REFS.some(function (a) { return a[0] === r; }); });
     return p;
   }
   function weekStart(off) {
@@ -406,49 +455,233 @@ textarea.out { font-family: var(--font-mono); font-size: 13px; min-height: 160px
     return d;
   }
   function keyShort(k) { var a = k.split('-'); return new Date(+a[0], +a[1] - 1, +a[2]).toLocaleDateString([], { month: 'short', day: 'numeric' }); }
-  function renderSummary() {
-    var ws = weekStart(weekOffset), days = [];
-    for (var i = 0; i < 7; i++) { var d = new Date(ws); d.setDate(d.getDate() + i); days.push(dayKey(d.getTime())); }
-    var CATS = ['prep', 'test', 'score'], tot = { prep: 0, test: 0, score: 0 }, cnt = { prep: 0, test: 0, score: 0 }, byDay = {}, worked = 0, fin = 0, waiting = 0;
-    days.forEach(function (k) { byDay[k] = { prep: 0, test: 0, score: 0 }; });
-    state.profiles.forEach(function (p) {
-      if (p.example) return;
-      if (status(p) === 'ready') waiting++;
-      var pd = perDay(p), any = false, mine = { prep: 0, test: 0, score: 0 };
-      days.forEach(function (k) {
-        var dd = pd[k]; if (!dd) return;
-        if (dd.entries.length) any = true;
-        CATS.forEach(function (c) { mine[c] += dd[c]; byDay[k][c] += dd[c]; });
-      });
-      if (any) worked++;
-      CATS.forEach(function (c) { tot[c] += mine[c]; if (mine[c] > 0) cnt[c]++; });
-      if (p.final && p.finalAt) { var fk = dayKey(p.finalAt); if (fk >= days[0] && fk <= days[6]) fin++; }
+  // Optional patient details (broad categories only) used for the summary comparisons.
+  var AGES = [['18-39', '18–39', '18–39'], ['40-59', '40–59', '40–59'], ['60-74', '60–74', '60–74'], ['75+', '75+', '75+']];
+  var LANGS = [['en', 'English', 'English'], ['es', 'Spanish', 'Spanish'], ['other', 'Other', 'Other']];
+  var REFS = [['asd', 'ASD', 'ASD'], ['adhd', 'ADHD', 'ADHD'], ['dementia', 'Dementia / neurocognitive', 'Dementia'], ['personality', 'Personality disorder', 'Personality'],
+              ['psychotic', 'Psychotic disorder', 'Psychotic'], ['language', 'Language disorder', 'Language disorder'], ['other', 'Other', 'Other']];
+  function labelOf(list, key) { for (var i = 0; i < list.length; i++) if (list[i][0] === key) return list[i][1]; return ''; }
+  function detailLabels(p) {
+    var o = [];
+    if (p.ageGroup) o.push(labelOf(AGES, p.ageGroup));
+    if (p.language) o.push(labelOf(LANGS, p.language));
+    (p.referrals || []).forEach(function (r) { o.push(labelOf(REFS, r)); });
+    return o;
+  }
+  function detailsHtml(p) {
+    function sel(id, list, cur) {
+      return '<select id="' + id + '"><option value="">Not entered</option>' + list.map(function (x) { return '<option value="' + x[0] + '"' + (cur === x[0] ? ' selected' : '') + '>' + x[1] + '</option>'; }).join('') + '</select>';
+    }
+    return '<p class="label">Patient details (optional)</p>' +
+      '<div class="row"><div class="field"><label class="hint" for="pAge">Age group</label>' + sel('pAge', AGES, p.ageGroup) + '</div>' +
+      '<div class="field"><label class="hint" for="pLang">Language</label>' + sel('pLang', LANGS, p.language) + '</div></div>' +
+      '<p class="hint">Referral type (pick all that apply)</p>' +
+      '<div class="chips" id="pRefs">' + REFS.map(function (r) {
+        return '<button type="button" class="chip" data-act="ref" data-ref="' + r[0] + '" aria-pressed="' + ((p.referrals || []).indexOf(r[0]) > -1) + '">' + r[1] + '</button>';
+      }).join('') + '</div>' +
+      '<p class="hint">Broad categories only. These feed the comparisons in the summary.</p>';
+  }
+  // Start/end pairs for one category. An unfinished start is ignored.
+  function sessions(p, cat) {
+    var out = [], open = null;
+    sorted(p).forEach(function (e) {
+      var t = TYPES[e.type]; if (t.cat !== cat) return;
+      if (t.dir === 's') { if (open == null) open = e.ts; }
+      else if (open != null) { out.push({ s: open, e: Math.max(open, e.ts) }); open = null; }
     });
-    var maxDay = 1; days.forEach(function (k) { maxDay = Math.max(maxDay, byDay[k].prep + byDay[k].test + byDay[k].score); });
-    var wd = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    var bars = days.map(function (k) {
-      var b = byDay[k];
-      function seg(c, cls) { return b[c] ? '<div class="seg ' + cls + '" style="height:' + Math.max(3, Math.round(b[c] / maxDay * 100)) + 'px"></div>' : ''; }
-      return '<div class="col">' + seg('score', 's') + seg('test', 't') + seg('prep', 'p') + '</div>';
+    return out;
+  }
+  function fmtGap(ms) { return ms >= 36 * 3600000 ? (ms / 86400000).toFixed(1) + ' days' : fmtDur(ms); }
+  function avgList(a) { if (!a.length) return null; var t = 0; a.forEach(function (x) { t += x; }); return t / a.length; }
+  function mins(ms) { return Math.round(ms / 60000); }
+
+  function summaryModel() {
+    var CATS = ['prep', 'test', 'score'], wdN = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    var now = new Date(), inRange, buckets = [], label, rel, nav = true, bucketName;
+    function newV() { return { prep: 0, test: 0, score: 0 }; }
+    if (period === 'week') {
+      var ws = weekStart(weekOffset), keys = [];
+      for (var i = 0; i < 7; i++) { var d = new Date(ws); d.setDate(d.getDate() + i); keys.push(dayKey(d.getTime())); }
+      inRange = function (k) { return k >= keys[0] && k <= keys[6]; };
+      keys.forEach(function (k, i) { buckets.push({ label: wdN[i], has: function (x) { return x === k; }, v: newV() }); });
+      label = keyShort(keys[0]) + ' to ' + keyShort(keys[6]);
+      rel = weekOffset === 0 ? 'This week' : weekOffset === -1 ? 'Last week' : Math.abs(weekOffset) + ' weeks ago';
+      bucketName = 'day';
+    } else if (period === 'month') {
+      var mo = new Date(now.getFullYear(), now.getMonth() + weekOffset, 1), y = mo.getFullYear(), mi = mo.getMonth();
+      var dim = new Date(y, mi + 1, 0).getDate(), pre = y + '-' + p2(mi + 1) + '-', cur = null;
+      inRange = function (k) { return k.slice(0, 8) === pre; };
+      for (var dd = 1; dd <= dim; dd++) {
+        var isMon = new Date(y, mi, dd).getDay() === 1;
+        if (!cur || isMon) { cur = { from: dd, to: dd, v: newV() }; buckets.push(cur); } else cur.to = dd;
+      }
+      buckets.forEach(function (bk) {
+        bk.label = bk.from === bk.to ? '' + bk.from : bk.from + '–' + bk.to;
+        bk.has = function (k) { if (!inRange(k)) return false; var n = +k.slice(8); return n >= bk.from && n <= bk.to; };
+      });
+      label = mo.toLocaleDateString([], { month: 'long', year: 'numeric' });
+      rel = weekOffset === 0 ? 'This month' : weekOffset === -1 ? 'Last month' : Math.abs(weekOffset) + ' months ago';
+      bucketName = 'week';
+    } else {
+      nav = false; inRange = function () { return true; };
+      for (var j = 11; j >= 0; j--) {
+        (function (md) {
+          var pfx = md.getFullYear() + '-' + p2(md.getMonth() + 1);
+          buckets.push({ label: md.toLocaleDateString([], { month: 'short' }), has: function (k) { return k.slice(0, 7) === pfx; }, v: newV() });
+        })(new Date(now.getFullYear(), now.getMonth() - j, 1));
+      }
+      label = 'All time'; rel = 'Every profile on this phone (chart shows the last 12 months)'; bucketName = 'month';
+    }
+    var m = { period: period, label: label, rel: rel, nav: nav, bucketName: bucketName, buckets: buckets, tot: newV(), cnt: newV(), worked: 0, fin: 0, waiting: 0,
+              groups: { age: {}, lang: {}, ref: {} }, turn: [], wait: [], wday: [], tod: { am: { sum: 0, n: 0 }, pm: { sum: 0, n: 0 }, late: { sum: 0, n: 0 } } };
+    for (var w = 0; w < 7; w++) m.wday.push({ sum: 0, n: 0 });
+    function addTo(dim, key, mine, split) {
+      var g = m.groups[dim][key] || (m.groups[dim][key] = { n: 0, sum: newV(), cnt: newV(), tn: 0, sp: 0 });
+      g.n++;
+      CATS.forEach(function (c) { if (mine[c] > 0) { g.sum[c] += mine[c]; g.cnt[c]++; } });
+      if (mine.test > 0) { g.tn++; if (split) g.sp++; }
+    }
+    state.profiles.concat(state.archive).forEach(function (p) {
+      if (p.example) return;
+      if (!p.archived && status(p) === 'ready') m.waiting++;
+      var pd = perDay(p), mine = newV(), any = false, testDays = 0;
+      Object.keys(pd).forEach(function (k) {
+        if (!inRange(k)) return;
+        var dd = pd[k]; if (dd.entries.length) any = true;
+        CATS.forEach(function (c) { mine[c] += dd[c]; });
+        buckets.forEach(function (bk) { if (bk.has(k)) CATS.forEach(function (c) { bk.v[c] += dd[c]; }); });
+        if (dd.entries.some(function (e) { return TYPES[e.type].cat === 'test'; })) testDays++;
+        if (dd.test > 0) { var a = k.split('-'), wi = (new Date(+a[0], +a[1] - 1, +a[2]).getDay() + 6) % 7; m.wday[wi].sum += dd.test; m.wday[wi].n++; }
+      });
+      if (any) {
+        m.worked++;
+        CATS.forEach(function (c) { m.tot[c] += mine[c]; if (mine[c] > 0) m.cnt[c]++; });
+        var split = testDays > 1;
+        addTo('age', p.ageGroup || '', mine, split);
+        addTo('lang', p.language || '', mine, split);
+        if (p.referrals && p.referrals.length) p.referrals.forEach(function (r) { addTo('ref', r, mine, split); }); else addTo('ref', '', mine, split);
+      }
+      var te = sessions(p, 'test'), sc = sessions(p, 'score');
+      te.forEach(function (x) {
+        if (!inRange(dayKey(x.s))) return;
+        var h = new Date(x.s).getHours(), bk = h < 12 ? 'am' : h < 17 ? 'pm' : 'late';
+        m.tod[bk].sum += x.e - x.s; m.tod[bk].n++;
+      });
+      if (p.final && p.finalAt && inRange(dayKey(p.finalAt))) {
+        m.fin++; var le = sorted(p).slice(-1)[0]; if (le) m.turn.push(Math.max(0, p.finalAt - le.ts));
+      }
+      if (te.length && sc.length && inRange(dayKey(sc[0].s))) m.wait.push(Math.max(0, sc[0].s - te[te.length - 1].e));
+    });
+    function rows(dim, list) {
+      var g = m.groups[dim], out = [];
+      list.concat([['', 'Not entered', 'Not entered']]).forEach(function (it) {
+        var x = g[it[0]]; if (!x || !x.n) return;
+        out.push({ label: it[2], n: x.n, entered: it[0] !== '',
+          avg: { prep: x.cnt.prep ? x.sum.prep / x.cnt.prep : null, test: x.cnt.test ? x.sum.test / x.cnt.test : null, score: x.cnt.score ? x.sum.score / x.cnt.score : null },
+          split: x.tn ? x.sp / x.tn : null });
+      });
+      return out.some(function (r) { return r.entered; }) ? out : [];
+    }
+    m.tables = [{ title: 'By age group', key: 'Age group', rows: rows('age', AGES) }, { title: 'By language', key: 'Language', rows: rows('lang', LANGS) },
+                { title: 'By referral type', key: 'Referral', rows: rows('ref', REFS) }].filter(function (t) { return t.rows.length; });
+    m.avgProf = function (c) { return m.cnt[c] ? m.tot[c] / m.cnt[c] : null; };
+    m.turnAvg = avgList(m.turn); m.waitAvg = avgList(m.wait);
+    m.todRows = [['am', 'Morning'], ['pm', 'Afternoon'], ['late', 'Late day']].map(function (x) { var t = m.tod[x[0]]; return { label: x[1], n: t.n, avg: t.n ? t.sum / t.n : null }; });
+    m.wdRows = wdN.map(function (nm, i) { var t = m.wday[i]; return { label: nm, n: t.n, avg: t.n ? t.sum / t.n : null }; });
+    return m;
+  }
+
+  function dash(ms) { return ms == null ? '–' : fmtDur(ms); }
+  function renderSummary() {
+    var m = summaryModel(), N = m.buckets.length, maxB = 1;
+    m.buckets.forEach(function (bk) { maxB = Math.max(maxB, bk.v.prep + bk.v.test + bk.v.score); });
+    function seg(bk, c, cls) { return bk.v[c] ? '<div class="seg ' + cls + '" style="height:' + Math.max(3, Math.round(bk.v[c] / maxB * 100)) + 'px"></div>' : ''; }
+    var bars = m.buckets.map(function (bk) { return '<div class="col">' + seg(bk, 'score', 's') + seg(bk, 'test', 't') + seg(bk, 'prep', 'p') + '</div>'; }).join('');
+    var lbls = m.buckets.map(function (bk) { var t = bk.v.prep + bk.v.test + bk.v.score; return '<div>' + bk.label + (N <= 7 ? '<span class="mono">' + (t ? fmtDur(t) : '') + '</span>' : '') + '</div>'; }).join('');
+    var grid = 'style="grid-template-columns: repeat(' + N + ', minmax(0, 1fr))"';
+    var anyTime = m.tot.prep + m.tot.test + m.tot.score > 0;
+    function stat(a, b) { return '<div class="stat"><span>' + a + '</span><b>' + b + '</b></div>'; }
+    function tbl(t) {
+      return '<div class="card"><p class="label">' + t.title + '</p><div class="tablewrap"><table class="gt"><thead><tr><th>Group</th><th>N</th><th>Prep</th><th>Test</th><th>Score</th><th>Split</th></tr></thead><tbody>' +
+        t.rows.map(function (r) {
+          return '<tr class="' + (r.n < 5 ? 'low' : '') + '"><td>' + esc(r.label) + '</td><td>' + r.n + (r.n < 5 ? '*' : '') + '</td><td>' + dash(r.avg.prep) + '</td><td>' + dash(r.avg.test) + '</td><td>' + dash(r.avg.score) + '</td><td>' + (r.split == null ? '–' : Math.round(r.split * 100) + '%') + '</td></tr>';
+        }).join('') + '</tbody></table></div></div>';
+    }
+    function hbars(list) {
+      var mx = 1; list.forEach(function (r) { if (r.avg) mx = Math.max(mx, r.avg); });
+      return list.map(function (r) { return '<div class="hb"><span>' + r.label + '</span><div class="track"><i style="width:' + (r.avg ? Math.max(3, Math.round(r.avg / mx * 100)) : 0) + '%"></i></div><b>' + (r.avg ? fmtDur(r.avg) : '–') + ' <small>n=' + r.n + '</small></b></div>'; }).join('');
+    }
+    var periods = [['week', 'Week'], ['month', 'Month'], ['all', 'All time']].map(function (x) {
+      return '<button class="chip" data-act="period" data-p="' + x[0] + '" aria-pressed="' + (period === x[0]) + '">' + x[1] + '</button>';
     }).join('');
-    var lbls = days.map(function (k, i) { var t = byDay[k].prep + byDay[k].test + byDay[k].score; return '<div>' + wd[i] + '<span class="mono">' + (t ? fmtDur(t) : '') + '</span></div>'; }).join('');
-    function avg(c) { return cnt[c] ? fmtDur(tot[c] / cnt[c]) : 'none yet'; }
-    var rel = weekOffset === 0 ? 'This week' : weekOffset === -1 ? 'Last week' : Math.abs(weekOffset) + ' weeks ago';
     app.innerHTML =
       '<div class="top"><button class="back" data-act="home">‹ Profiles</button><span class="clock" id="clk"></span></div>' +
-      '<h1 class="brand">Weekly summary</h1>' +
-      '<div class="wknav"><button class="btn" data-act="weekprev" aria-label="Previous week">‹</button><div style="text-align:center"><b>' + keyShort(days[0]) + ' to ' + keyShort(days[6]) + '</b><br><span class="hint">' + rel + '</span></div><button class="btn" data-act="weeknext" aria-label="Next week"' + (weekOffset >= 0 ? ' disabled' : '') + '>›</button></div>' +
-      '<div class="sums"><div class="sum p"><span class="label">Prep</span><b>' + fmtDur(tot.prep) + '</b></div><div class="sum t"><span class="label">Testing</span><b>' + fmtDur(tot.test) + '</b></div><div class="sum s"><span class="label">Scoring</span><b>' + fmtDur(tot.score) + '</b></div></div>' +
-      '<div class="card"><p class="label">Time by day</p><div class="bars">' + bars + '</div><div class="barlbl">' + lbls + '</div>' +
-      '<div class="legend"><span><i style="background:var(--prep)"></i>Prep</span><span><i style="background:var(--test)"></i>Testing</span><span><i style="background:var(--score)"></i>Scoring</span></div></div>' +
-      '<div class="card"><div class="stat"><span>Profiles worked on</span><b>' + worked + '</b></div>' +
-      '<div class="stat"><span>Finalized this week</span><b>' + fin + '</b></div>' +
-      '<div class="stat"><span>Waiting for master tracker now</span><b>' + waiting + '</b></div>' +
-      '<div class="stat"><span>Average prep per profile</span><b>' + avg('prep') + '</b></div>' +
-      '<div class="stat"><span>Average testing per profile</span><b>' + avg('test') + '</b></div>' +
-      '<div class="stat"><span>Average scoring per profile</span><b>' + avg('score') + '</b></div></div>' +
-      '<p class="hint">Time counts toward the day it was started. The example profile is not included.</p>';
+      '<h1 class="brand">Summary</h1>' +
+      '<div class="chips" role="group" aria-label="Time period">' + periods + '</div>' +
+      (m.nav ? '<div class="wknav"><button class="btn" data-act="weekprev" aria-label="Previous">‹</button><div style="text-align:center"><b>' + m.label + '</b><br><span class="hint">' + m.rel + '</span></div><button class="btn" data-act="weeknext" aria-label="Next"' + (weekOffset >= 0 ? ' disabled' : '') + '>›</button></div>'
+               : '<div style="text-align:center"><b>' + m.label + '</b><br><span class="hint">' + m.rel + '</span></div>') +
+      '<div class="sumbtns"><button class="btn" data-act="copysumtext">Copy as text</button><button class="btn" data-act="copysumsheet">Copy for spreadsheet</button></div>' +
+      '<div class="sums"><div class="sum p"><span class="label">Prep</span><b>' + fmtDur(m.tot.prep) + '</b></div><div class="sum t"><span class="label">Testing</span><b>' + fmtDur(m.tot.test) + '</b></div><div class="sum s"><span class="label">Scoring</span><b>' + fmtDur(m.tot.score) + '</b></div></div>' +
+      '<div class="card"><p class="label">Time by ' + m.bucketName + '</p>' + (anyTime ? '<div class="bars" ' + grid + '>' + bars + '</div><div class="barlbl" ' + grid + '>' + lbls + '</div>' +
+      '<div class="legend"><span><i style="background:var(--prep)"></i>Prep</span><span><i style="background:var(--test)"></i>Testing</span><span><i style="background:var(--score)"></i>Scoring</span></div>' : '<p class="hint">No time logged in this period.</p>') + '</div>' +
+      '<div class="card">' + stat('Profiles worked on', m.worked) + stat('Finalized in this period', m.fin) + stat('Waiting for master tracker now', m.waiting) +
+      stat('Average prep per profile', dash(m.avgProf('prep'))) + stat('Average testing per profile', dash(m.avgProf('test'))) + stat('Average scoring per profile', dash(m.avgProf('score'))) +
+      stat('Testing end to scoring start (average)', m.waitAvg == null ? '–' : fmtGap(m.waitAvg)) +
+      stat('Last stamp to finalized (average)', m.turnAvg == null ? '–' : fmtGap(m.turnAvg)) + '</div>' +
+      m.tables.map(tbl).join('') +
+      (m.tables.length ? '<p class="hint">Each cell is the average per profile. N is the number of profiles. Split is the share of profiles whose testing took more than one day. * means fewer than 5 profiles, so treat it with caution. Referral groups overlap, because one patient can have several referrals.</p>' : '<p class="hint">Add age group, language and referral type inside profiles to see comparisons here.</p>') +
+      '<div class="card"><p class="label">Average testing time per day, by weekday</p>' + hbars(m.wdRows) + '</div>' +
+      '<div class="card"><p class="label">Average testing session, by start time</p>' + hbars(m.todRows) + '<p class="hint">Morning starts before 12:00. Afternoon is 12:00 to 16:59. Late day is 17:00 or later.</p></div>' +
+      '<p class="hint">Time counts toward the day it was started. Averages do not account for which tests were given. The example profile is not included.' + (state.archive.length ? ' Includes ' + state.archive.length + ' anonymous record' + (state.archive.length === 1 ? '' : 's') + ' from deleted profiles.' : '') + '</p>';
     tickClock();
+  }
+
+  function summaryText(m) {
+    var L = [];
+    function av(c) { var v = m.avgProf(c); return v == null ? 'none' : fmtDur(v); }
+    L.push('Time Tracker summary: ' + m.label + (m.period === 'all' ? '' : ' (' + m.rel + ')'), '');
+    L.push('Profiles worked on: ' + m.worked, 'Finalized in this period: ' + m.fin, 'Waiting for master tracker now: ' + m.waiting, '');
+    L.push('Total time: Prep ' + fmtDur(m.tot.prep) + ', Testing ' + fmtDur(m.tot.test) + ', Scoring ' + fmtDur(m.tot.score));
+    L.push('Average per profile: Prep ' + av('prep') + ', Testing ' + av('test') + ', Scoring ' + av('score'));
+    L.push('Testing end to scoring start (average): ' + (m.waitAvg == null ? 'none' : fmtGap(m.waitAvg)) + ' (n=' + m.wait.length + ')');
+    L.push('Last stamp to finalized (average): ' + (m.turnAvg == null ? 'none' : fmtGap(m.turnAvg)) + ' (n=' + m.turn.length + ')', '');
+    var br = m.buckets.filter(function (b) { return b.v.prep + b.v.test + b.v.score > 0; });
+    if (br.length) {
+      L.push('Time by ' + m.bucketName + ':');
+      br.forEach(function (b) { L.push('  ' + b.label + ': Prep ' + fmtDur(b.v.prep) + ', Testing ' + fmtDur(b.v.test) + ', Scoring ' + fmtDur(b.v.score)); });
+      L.push('');
+    }
+    m.tables.forEach(function (t) {
+      L.push(t.title + ' (average per profile):');
+      t.rows.forEach(function (r) {
+        L.push('  ' + r.label + ' (n=' + r.n + (r.n < 5 ? ', small sample' : '') + '): Prep ' + dash(r.avg.prep) + ', Testing ' + dash(r.avg.test) + ', Scoring ' + dash(r.avg.score) + ', Split over days ' + (r.split == null ? '-' : Math.round(r.split * 100) + '%'));
+      });
+      L.push('');
+    });
+    L.push('Average testing time per day, by weekday:');
+    m.wdRows.forEach(function (r) { if (r.n) L.push('  ' + r.label + ': ' + fmtDur(r.avg) + ' (n=' + r.n + ')'); });
+    L.push('', 'Average testing session, by start time:');
+    m.todRows.forEach(function (r) { if (r.n) L.push('  ' + r.label + ': ' + fmtDur(r.avg) + ' (n=' + r.n + ')'); });
+    L.push('', 'Notes: Times are averages per profile and do not account for which tests were given. Referral groups overlap. The summary contains no patient initials.' + (state.archive.length ? ' Includes ' + state.archive.length + ' anonymous record' + (state.archive.length === 1 ? '' : 's') + ' from deleted profiles.' : ''));
+    return L.join('\n');
+  }
+
+  function summarySheet(m) {
+    var R = [];
+    function row() { R.push(Array.prototype.slice.call(arguments).join('\t')); }
+    function mm(v) { return v == null ? '' : mins(v); }
+    row('Summary', m.label, m.rel); row('Profiles worked on', m.worked); row('Finalized in this period', m.fin); row('Waiting for master tracker now', m.waiting);
+    row('Avg prep per profile (min)', mm(m.avgProf('prep'))); row('Avg testing per profile (min)', mm(m.avgProf('test'))); row('Avg scoring per profile (min)', mm(m.avgProf('score')));
+    row('Avg testing end to scoring start (hours)', m.waitAvg == null ? '' : (m.waitAvg / 3600000).toFixed(1)); row('Avg last stamp to finalized (hours)', m.turnAvg == null ? '' : (m.turnAvg / 3600000).toFixed(1));
+    R.push(''); row('Time by ' + m.bucketName, 'Prep (min)', 'Testing (min)', 'Scoring (min)');
+    m.buckets.forEach(function (b) { row(b.label, mins(b.v.prep), mins(b.v.test), mins(b.v.score)); });
+    R.push(''); row('Group type', 'Group', 'Profiles', 'Avg prep (min)', 'Avg testing (min)', 'Avg scoring (min)', 'Split over days (%)');
+    m.tables.forEach(function (t) { t.rows.forEach(function (r) { row(t.key, r.label, r.n, mm(r.avg.prep), mm(r.avg.test), mm(r.avg.score), r.split == null ? '' : Math.round(r.split * 100)); }); });
+    R.push(''); row('Weekday', 'Avg testing per day (min)', 'Days');
+    m.wdRows.forEach(function (r) { row(r.label, mm(r.avg), r.n); });
+    R.push(''); row('Testing start time', 'Avg session (min)', 'Sessions');
+    m.todRows.forEach(function (r) { row(r.label, mm(r.avg), r.n); });
+    return R.join('\n');
   }
 
   /* ---------- rendering ---------- */
@@ -458,7 +691,7 @@ textarea.out { font-family: var(--font-mono); font-size: 13px; min-height: 160px
 
   // Searchable text for a profile: initials plus every day it has activity, in several date spellings.
   function hay(p) {
-    var s = [p.initials, STATUS[status(p)].label, p.notes || ''], days = {};
+    var s = [p.initials, STATUS[status(p)].label, p.notes || ''].concat(detailLabels(p)), days = {};
     days[p.date] = 1; p.entries.forEach(function (e) { days[dayKey(e.ts)] = 1; });
     Object.keys(days).forEach(function (k) {
       var a = k.split('-'), y = +a[0], m = +a[1], d = +a[2], dt = new Date(y, m - 1, d);
@@ -556,7 +789,8 @@ textarea.out { font-family: var(--font-mono); font-size: 13px; min-height: 160px
       '<div id="undoslot">' + (lastUndo = undoHtml(p)) + '</div>' +
       '<div class="sums" id="sums">' + sumsHtml(p) + '</div>' +
       '<div class="card" id="wrapup">' + wrapHtml(p) + '</div>' +
-      '<div class="notes"><label class="label" for="pnotes">Notes</label><textarea id="pnotes" rows="3" maxlength="1000" placeholder="Overall notes, e.g. why testing was split, what is left to score">' + esc(p.notes || '') + '</textarea><span class="hint">Saved automatically. Initials only, no names.</span></div>' +
+      '<div class="card" id="details">' + detailsHtml(p) + '</div>' +
+      '<div class="notes"><label class="label" for="pnotes">Notes</label><textarea id="pnotes" rows="3" maxlength="1000" placeholder="scoring needed, Questionnaires, additional notes...">' + esc(p.notes || '') + '</textarea><span class="hint">Saved automatically. Initials only, no names.</span></div>' +
       '<div class="row"><button class="btn" style="flex:1" data-act="manual">Add time manually</button><button class="btn" style="flex:1" data-act="copy">Copy log</button></div>' +
       '<p class="label">Log (' + es.length + ')</p>' +
       '<div class="log">' + (es.length ? logHtml(p) : '<div class="empty">No stamps yet. Tap Start testing when the patient begins.</div>') + '</div>' +
@@ -693,6 +927,16 @@ textarea.out { font-family: var(--font-mono); font-size: 13px; min-height: 160px
     else if (act === 'editprofile') openProfileSheet(p);
     else if (act === 'filter') { statusFilter = el.getAttribute('data-st'); render(); }
     else if (act === 'summary') { view = 'summary'; weekOffset = 0; render(); window.scrollTo(0, 0); }
+    else if (act === 'period') { period = el.getAttribute('data-p'); weekOffset = 0; render(); }
+    else if (act === 'copysumtext') copyOrShow(summaryText(summaryModel()), 'Summary');
+    else if (act === 'copysumsheet') copyOrShow(summarySheet(summaryModel()), 'Summary for spreadsheet');
+    else if (act === 'ref') {
+      if (p) {
+        var rk = el.getAttribute('data-ref'); p.referrals = p.referrals || [];
+        var ix = p.referrals.indexOf(rk); if (ix > -1) p.referrals.splice(ix, 1); else p.referrals.push(rk);
+        save(); el.setAttribute('aria-pressed', ix === -1 ? 'true' : 'false');
+      }
+    }
     else if (act === 'weekprev') { weekOffset--; render(); }
     else if (act === 'weeknext') { if (weekOffset < 0) weekOffset++; render(); }
     else if (act === 'shift') {
@@ -703,13 +947,18 @@ textarea.out { font-family: var(--font-mono); font-size: 13px; min-height: 160px
       if (lastStamp && p) { p.entries = p.entries.filter(function (x) { return x.id !== lastStamp.eid; }); lastStamp = null; save(); render(); toast('Stamp removed'); }
     }
     else if (act === 'backup') {
-      var payload = JSON.stringify({ app: 'time-tracker-mobile', version: 1, exported: new Date().toISOString(), profiles: state.profiles, settings: state.settings });
+      var payload = JSON.stringify({ app: 'time-tracker-mobile', version: 1, exported: new Date().toISOString(), profiles: state.profiles, archive: state.archive, settings: state.settings });
       state.settings.lastBackup = Date.now(); save(); copyOrShow(payload, 'Backup'); render();
     }
     else if (act === 'restore') openRestoreSheet();
+    else if (act === 'erasearchive') {
+      var na = state.archive.length;
+      arm(el, 'Tap again to erase ' + na + ' record' + (na === 1 ? '' : 's'), function () { state.archive = []; save(); render(); toast('Anonymous records erased'); });
+    }
     else if (act === 'clearfinal') {
       var nf = state.profiles.filter(function (x) { return x.final; }).length;
       arm(el, 'Tap again to delete ' + nf + ' finalized', function () {
+        state.profiles.filter(function (x) { return x.final; }).forEach(archiveProfile);
         state.profiles = state.profiles.filter(function (x) { return !x.final; }); save(); render(); toast('Finalized profiles deleted');
       });
     }
@@ -718,7 +967,8 @@ textarea.out { font-family: var(--font-mono); font-size: 13px; min-height: 160px
     else if (act === 'delentry') arm(el, 'Tap again to delete', function () {
       p.entries = p.entries.filter(function (x) { return x.id !== el.getAttribute('data-id'); }); save(); layer.innerHTML = ''; render(); toast('Deleted');
     });
-    else if (act === 'delprofile') arm(el, 'Tap again to delete profile and its log', function () {
+    else if (act === 'delprofile') arm(el, 'Tap again to delete profile' + (state.settings.keepArchive ? ' (anonymous times are kept)' : ' and its log'), function () {
+      archiveProfile(p);
       state.profiles = state.profiles.filter(function (x) { return x.id !== p.id; }); save(); view = 'home'; state.activeId = null; render();
     });
     else if (act === 'copy') copyOrShow(logText(p), 'Log for ' + p.initials);
@@ -747,8 +997,10 @@ textarea.out { font-family: var(--font-mono); font-size: 13px; min-height: 160px
     var have = {}; state.profiles.forEach(function (p) { have[p.id] = 1; });
     var added = 0;
     list.forEach(function (x) { var c = cleanProfile(x); if (c && !have[c.id]) { state.profiles.push(c); have[c.id] = 1; added++; } });
+    var addedA = 0, haveA = {}; state.archive.forEach(function (a) { haveA[a.id] = 1; });
+    (Array.isArray(data.archive) ? data.archive : []).forEach(function (x) { var c = cleanArchive(x); if (c && !haveA[c.id]) { state.archive.push(c); haveA[c.id] = 1; addedA++; } });
     save(); layer.innerHTML = ''; render();
-    toast(added ? 'Restored ' + added + ' profile' + (added === 1 ? '' : 's') : 'Nothing new to restore');
+    toast(added || addedA ? 'Restored ' + added + ' profile' + (added === 1 ? '' : 's') + (addedA ? ' and ' + addedA + ' anonymous record' + (addedA === 1 ? '' : 's') : '') : 'Nothing new to restore');
   });
 
   document.addEventListener('toggle', function (ev) { if (ev.target && ev.target.id === 'tools') toolsOpen = ev.target.open; }, true);
@@ -760,6 +1012,12 @@ textarea.out { font-family: var(--font-mono); font-size: 13px; min-height: 160px
       var n = purgeOld();
       if (n) { render(); toast(pendingToast); pendingToast = ''; }
       else toast(+el.value ? 'Finalized profiles will be deleted after ' + el.value + ' days' : 'Auto-delete is off');
+      return;
+    }
+    if (el.id === 'keepArch') { state.settings.keepArchive = el.checked; save(); toast(el.checked ? 'Anonymous times will be kept' : 'Deleted profiles will be removed completely'); return; }
+    if (el.id === 'pAge' || el.id === 'pLang') {
+      var dp = active();
+      if (dp) { if (el.id === 'pAge') dp.ageGroup = el.value || undefined; else dp.language = el.value || undefined; save(); }
       return;
     }
     if (el.id !== 'chkDone' && el.id !== 'chkFinal') return;

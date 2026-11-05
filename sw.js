@@ -1,4 +1,4 @@
-const CACHE = 'ttm-3213d29fc0';
+const CACHE = 'ttm-6169d44d06';
 const FONTS = 'ttm-fonts';
 const CORE = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png', './apple-touch-icon.png'];
 
